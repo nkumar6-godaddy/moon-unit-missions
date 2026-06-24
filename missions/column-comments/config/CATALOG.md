@@ -41,6 +41,7 @@ Per-table configs live at `config/<db_name>/<table_name>.yaml`. This file is **o
 | gd_traffic_mart | analytic_traffic_agg | standard | enriched | [config](gd-traffic-mart/analytic-traffic-agg.yaml) | 1 Confluence URL from Alation; 1 reference tables from lineage (1/1 curated) |
 | gd_traffic_mart | analytic_traffic_detail | standard | enriched | [config](gd-traffic-mart/analytic-traffic-detail.yaml) | 3 Confluence URLs from Alation; 6 reference tables from lineage (6/6 curated) |
 | pricing_mart | product_price_catalog | standard | enriched | [config](pricing-mart/product-price-catalog.yaml) | 2 Confluence URLs from Alation (incl. predecessor design); 1 reference table (predecessor pricing_mart.product_price_list with Alation id; lineage curated=0/16 — all upstreams are raw _snap sources) |
+| marketing_mart | customer_suppression | standard | ready | [config](marketing-mart/customer-suppression.yaml) | Customer suppression list for marketing — 2 Confluence URLs (overview + analysis/design); 6 reference tables from lineage (6/19 curated: customer360, ecomm_cln, signals_platform_cln) |
 | _example_ | _example-table_ | _standard_ | _planned_ | _—_ | _one-line purpose / context_ |
 
 ## How to add a row

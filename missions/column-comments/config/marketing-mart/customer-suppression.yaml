@@ -1,0 +1,61 @@
+# Configuration for Column Comments Enrichment Mission
+# Edit this file before each run to specify the target table and reference materials.
+#
+# Alation: Customer Suppression (id=6619866)
+# Description: Identifies customers who should be suppressed from marketing communications.
+
+# Target table location in the data lake registry
+target:
+  # Database name (e.g., "analytic", "customer360", "ecomm-cln")
+  db_name: "marketing-mart"
+  # Table name (e.g., "ads-bill-line", "cdl-current")
+  table_name: "customer-suppression"
+  # Registry path variant: "standard" or "dlms-api"
+  #   standard: catalog/config/prod/us-west-2/<db-name>/<table-name>/
+  #   dlms-api: catalog/config/prod/dlms-api/us-west-2/<db-name>/<table-name>/
+  registry_path: "standard"
+
+# Confluence pages for table requirements and design specifications.
+# Sourced from the Alation table description; verify each URL before running.
+confluence_pages:
+  - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/10370826/Customer+-+Customer+Suppression"
+    description: "Customer - Customer Suppression — overview and requirements page from Alation table description."
+  - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3114766874/Analysis+and+Design+of+Customer+Suppression"
+    description: "Analysis and Design of Customer Suppression — detailed analysis and design specification."
+
+# Successor/related tables whose column descriptions provide relevant context.
+# The agent looks these up in Alation to extract existing column descriptions.
+# Populated via: python3 scripts/lake_lineage_fetch.py marketing-mart/customer-suppression
+# (19 total upstream deps; 6 curated)
+reference_tables:
+  - name: "dim_customer_vw"
+    schema: "customer360"
+    alation_table_id: 7022291
+    description: "Upstream dependency from data lake registry lineage — customer360.dim_customer_vw: shopper and profile data in customer360"
+  - name: "gdshop_blocked_country_region_cln"
+    schema: "ecomm_cln"
+    alation_table_id: 6593908
+    description: "Upstream dependency from data lake registry lineage — ecomm_cln.gdshop_blocked_country_region_cln: A blacklist of country regions maintained by eComm for pre-purchase checks."
+  - name: "gdshop_blocked_country_cln"
+    schema: "ecomm_cln"
+    alation_table_id: 6593902
+    description: "Upstream dependency from data lake registry lineage — ecomm_cln.gdshop_blocked_country_cln: A blacklist of countries maintained by eComm for pre-purchase checks."
+  - name: "oeg_email_event_send_cln"
+    schema: "signals_platform_cln"
+    alation_table_id: 6622143
+    description: "Upstream dependency from data lake registry lineage — signals_platform_cln.oeg_email_event_send_cln: Contains send events from the Outbound Email Generator (OEG). Partitioned hourly."
+  - name: "oeg_email_event_open_cln"
+    schema: "signals_platform_cln"
+    alation_table_id: 6622040
+    description: "Upstream dependency from data lake registry lineage — signals_platform_cln.oeg_email_event_open_cln: Contains open events from the Outbound Email Generator (OEG). Partitioned hourly."
+  - name: "profile_audit_lake_cln_v2"
+    schema: "signals_platform_cln"
+    alation_table_id: 7035769
+    description: "Upstream dependency from data lake registry lineage — signals_platform_cln.profile_audit_lake_cln_v2: Profile audit events store."
+
+# Alation configuration (optional — enriches descriptions with catalog metadata).
+# Credentials (user_id, refresh_token, URL) are loaded from .env.
+alation:
+  enabled: true
+  # Table search query (defaults to db_name.table_name if not set)
+  search_query: null
