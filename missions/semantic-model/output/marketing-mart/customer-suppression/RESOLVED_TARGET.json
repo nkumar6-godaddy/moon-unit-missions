@@ -1,0 +1,16 @@
+{
+  "schema": "marketing_mart",
+  "table_hyphen": "customer-suppression",
+  "table_underscore": "customer_suppression",
+  "lake_table_path": "marketing-mart/customer-suppression",
+  "semantic_model_name": "marketing_mart_customer_suppression",
+  "confidence": "high",
+  "evidence": [
+    "repos/lake/catalog/config/prod/us-west-2/marketing-mart/customer-suppression/table.ddl (CREATE TABLE customer_suppression)",
+    "repos/lake/catalog/config/prod/us-west-2/marketing-mart/customer-suppression/table.yaml (table_relative_path: customer_suppression, database_name: marketing_mart implied by stack group config)",
+    "customer/eds-customer-suppression/src/pyspark/customer_suppression.py: transform_stg() write target",
+    "customer/eds-customer-suppression/src/dag/customer_suppression_dag.py: args -t customer_suppression",
+    "customer/eds-customer-suppression/src/policies/customer_suppression_dag.yaml: output marketing_mart.customer_suppression",
+    "Alation: qualified_name=81.AwsDataCatalog.marketing_mart.customer_suppression (table_id=6619866)"
+  ]
+}

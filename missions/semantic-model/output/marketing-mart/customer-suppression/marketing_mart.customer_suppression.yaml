@@ -1,0 +1,1014 @@
+version: "0.2.0.dev0"
+
+semantic_model:
+  - name: marketing_mart_customer_suppression
+    description: >
+      Daily snapshot of GoDaddy customer marketing suppression flags. Defines which
+      customers should be excluded from marketing communications based on email
+      deliverability, account type, geographic restrictions, and competitive email
+      domain detection. Grain: one row per customer_id (LATEST_SNAPSHOT; full daily
+      replacement). Distinct from customer consent/opt-out — these are GoDaddy-driven
+      suppression rules.
+    ai_context:
+      instructions: |
+        Use this model to determine which GoDaddy customers are suppressed from marketing
+        communications. Suppression is GoDaddy-driven (distinct from customer consent/opt-out).
+        Each row represents one customer identified by customer_id.
+
+        GRAIN: One row per customer_id (LATEST_SNAPSHOT; full replacement each daily run).
+        Always query the current snapshot. There are no historical partitions on the fact table.
+
+        PARTITION FILTER: This table has no partition column. No partition filter is required
+        or available. Apply date-range filters on etl_build_mst_ts only for staleness checks.
+
+        PRIMARY KEY: customer_id (UUID string) is the unique key on the fact. shopper_id is
+        also present on the fact but is NOT unique — one shopper may have multiple customer_ids.
+        Do not use shopper_id as a unique row identifier on this table.
+
+        ARRAY FIELDS: None.
+
+        EXCLUDED JOIN TARGETS — do NOT join to these tables; use the pre-computed fact
+        columns instead:
+        - marketing_bouncesystem.bouncesystem_bounced_email_snap,
+          bouncesystem_bounced_email_log_snap, bouncesystem_bounce_type_snap:
+          source event logs with no join key on the fact; use email_address_hard_bounced_flag
+          and email_address_soft_bounced_flag on the fact instead.
+        - sfmc_email_events_cln.sfmc_email_events_bounce_cln, sfmc_email_events_send_log_cln,
+          sfmc_email_events_open_cln, sfmc_email_events_click_cln:
+          SFMC composite key (job_id/list_id/batch_id/subscriber_id) not on fact; use bounce
+          flags on the fact.
+        - emailsystem.oc_emailqueuesuccesstrackingclick_snap, oc_emailqueuesuccesstracking_snap,
+          oc_emailqueuesuccess_snap, oc_emailqueuedetail_snap (OCM tracking tables):
+          no join key on fact; values aggregated into bounce flags via multi-step ETL chain.
+        - signals_platform_cln.oeg_email_event_send_cln,
+          signals_platform_cln.oeg_email_event_open_cln,
+          signals_platform_cln.profile_audit_lake_cln_v2:
+          UNRESOLVED — not registered in lake catalog; used internally in ETL for bounce
+          re-engagement reset and email-change detection; not joinable from analytics queries.
+        - cust_customertracking.shopper_crossover_cln:
+          pool_13_active_flag is fully materialized as private_label_13_suppression_flag on
+          the fact; joining is redundant and would mislead analysts.
+        - ecomm_cln.gdshop_blocked_country_cln,
+          ecomm_cln.gdshop_blocked_country_region_cln:
+          country values are fully materialized into restricted_country_flag on the fact;
+          the fact has no country_code column to join back.
+
+        FIELD CAVEATS:
+        - excluded_email_flag: Always NULL in current implementation (FortKnox source not
+          yet wired). Do not use for filtering or suppression logic.
+        - bad_email_address_format_flag: Always NULL in current implementation (FortKnox
+          source not yet wired). Do not use for filtering.
+
+        LEGACY / DEPRECATED (not in current DDL or code):
+        - 'terrorist_country_flag': Appeared in legacy Confluence design; merged into
+          restricted_country_flag in the current implementation. Do not query separately.
+        - FortKnox bounce source (fortknox.tdaemailattributes_snap): Documented in Confluence
+          as a bounce source for an earlier design; current ETL uses bouncesystem/SFMC tables
+          instead. FortKnox is not present in the current pipeline.
+
+        JOIN GUIDANCE:
+        - Join to 'customer' dataset on customer_id for demographic attributes
+          (country_code, city_name, email_domain, account flags).
+        - Join to 'dim_customer_vw' on shopper_id — always filter current_record_flag = TRUE
+          on dim_customer_vw to avoid fan-out — for extended profile data including
+          internal_shopper_flag.
+      synonyms:
+        - marketing suppression
+        - customer suppression
+        - do not contact
+        - email suppression list
+        - marketing eligibility
+        - marketing exclusion
+        - suppression flags
+        - DNC list
+      examples:
+        - "How many customers are currently suppressed from marketing emails?"
+        - "Which customers have a hard bounce flag set?"
+        - "How many customers are suppressed due to restricted country?"
+        - "Show me suppression breakdown by flag type"
+        - "Is customer X eligible to receive marketing emails?"
+        - "What percentage of customers have soft bounce suppression?"
+        - "How many customers are flagged as internal GoDaddy accounts?"
+
+    datasets:
+      - name: customer_suppression
+        source: marketing_mart.customer_suppression
+        primary_key: [customer_id]
+        unique_keys:
+          - [customer_id]
+        description: >
+          Daily LATEST_SNAPSHOT of marketing suppression flags for each GoDaddy customer.
+          Grain: one row per customer_id. Full table replacement on each daily ETL run.
+          No partition column — query the full table. Storage: Parquet.
+          Data tier 3; SLA delivered by 06:00 MST daily.
+          S3 location: s3://gd-ckpetlbatch-prod-mktgdata-eds/marketing_mart_local/customer_suppression.
+        ai_context:
+          synonyms:
+            - suppression fact table
+            - marketing eligibility table
+            - customer exclusion flags
+        fields:
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_id
+            description: >
+              Primary key. Unique UUID string identifying a GoDaddy customer. Always
+              unique on this table — use as the join key for all analytics. Validated
+              as PK by DQ constraints in the ETL pipeline.
+            ai_context:
+              synonyms:
+                - customer UUID
+                - cust_id
+
+          - name: shopper_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: shopper_id
+            description: >
+              GoDaddy numeric shopper identifier. NOT unique on this table — one shopper
+              may have multiple customer_ids. Use customer_id as the unique identifier.
+              Use shopper_id only when joining to shopper-level dimensions such as
+              dim_customer_vw.
+            ai_context:
+              synonyms:
+                - shopper
+                - shopper number
+
+          - name: internal_account_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: internal_account_flag
+            description: >
+              TRUE if the customer is an internal GoDaddy account. Derived from
+              customer360.dim_customer_vw.internal_shopper_flag (where current_record_flag
+              = TRUE), joined via shopper_id where marketing_mart.customer.temporary_shopper_flag
+              = FALSE. COALESCE to FALSE when no matching record is found in dim_customer_vw.
+            ai_context:
+              synonyms:
+                - internal shopper
+                - GoDaddy employee
+                - internal customer
+
+          - name: private_label_13_suppression_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: private_label_13_suppression_flag
+            description: >
+              TRUE if the customer's email is tied to a GoDaddy reseller (private label
+              pool 13) and they purchased from that reseller within the last 12 months.
+              Derived from cust_customertracking.shopper_crossover_cln.pool_13_active_flag
+              joined on shopper_id. The source dimension (shopper_crossover_cln) is not
+              included as an OSI dataset — this field is the fully materialized result and
+              is the authoritative value for analytics. Do not join to shopper_crossover_cln.
+            ai_context:
+              synonyms:
+                - PL13
+                - reseller suppression
+                - pool 13
+                - private label suppression
+
+          - name: restricted_country_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: restricted_country_flag
+            description: >
+              TRUE if the customer's country or city+country combination is on GoDaddy's
+              blocked country/region list. Derived from ecomm_cln.gdshop_blocked_country_cln
+              (country-level block, matched via LOWER(marketing_mart.customer.country_code))
+              and ecomm_cln.gdshop_blocked_country_region_cln (region-level block, matched
+              via LOWER(country_code) + LOWER(city_name)) via ETL join to
+              marketing_mart.customer for the geographic keys. Neither blocked-country source
+              table is directly joinable from this fact — the fact carries no country_code
+              column. The legacy Confluence field 'terrorist_country_flag' (country-level
+              block) is merged into this single flag in the current implementation and does
+              not exist separately in the current DDL or code.
+            ai_context:
+              synonyms:
+                - sanctioned country
+                - blocked country
+                - restricted region
+                - embargoed country
+
+          - name: excluded_email_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: excluded_email_flag
+            description: >
+              ALWAYS NULL in current code — defined as NULL AS excluded_email_flag in
+              the PySpark ETL. Intended for excluded email logic sourced from
+              fortknox.tdaemailattributes_snap, but that FortKnox source is not yet wired
+              into the ETL pipeline. Do not use this field for filtering or suppression
+              logic; it will always return NULL. Field is preserved in the DDL schema as
+              a placeholder for future implementation.
+            ai_context:
+              synonyms:
+                - excluded email
+
+          - name: competitor_email_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: competitor_email_flag
+            description: >
+              TRUE if the customer's email domain matches a known competitor domain token.
+              Computed in ETL by splitting marketing_mart.customer.email_domain into tokens
+              and checking for array intersection with a hardcoded list of approximately
+              40 competitor domain names.
+            ai_context:
+              synonyms:
+                - competitor email
+                - rival email domain
+                - competitor domain
+
+          - name: bad_email_address_format_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: bad_email_address_format_flag
+            description: >
+              ALWAYS NULL in current code — defined as NULL AS bad_email_address_format_flag
+              in the PySpark ETL. Intended for bad email format detection sourced from
+              fortknox.tdaemailattributes_snap, but that FortKnox source is not yet wired
+              into the ETL pipeline. Do not use this field for filtering; it will always
+              return NULL. Field is preserved in the DDL schema as a placeholder for future
+              implementation.
+            ai_context:
+              synonyms:
+                - bad email format
+                - invalid email
+                - malformed email
+
+          - name: email_address_hard_bounced_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_address_hard_bounced_flag
+            description: >
+              TRUE if the customer has a hard bounce (bounce_code = 'HB' from bouncesystem,
+              or bounce_category = 'Hard bounce' from SFMC) with no subsequent re-engagement
+              event on a later calendar day, and no email address change after the last
+              bounce. Re-engagement comparison is at DATE level (not timestamp) to avoid
+              same-day pipeline artifacts. Re-engagement sources: OEG sends, SFMC
+              sends/opens/clicks, OCM clicks (365-day filtered).
+              Source event tables — marketing_bouncesystem.bouncesystem_bounced_email_snap,
+              bouncesystem_bounced_email_log_snap, bouncesystem_bounce_type_snap,
+              sfmc_email_events_cln.sfmc_email_events_bounce_cln, sfmc_email_events_send_log_cln,
+              sfmc_email_events_open_cln, sfmc_email_events_click_cln, and
+              emailsystem.oc_emailqueue* tables — have no join keys on this fact; use this
+              pre-computed flag. Additionally, signals_platform_cln.oeg_email_event_send_cln,
+              signals_platform_cln.oeg_email_event_open_cln, and
+              signals_platform_cln.profile_audit_lake_cln_v2 are UNRESOLVED upstream sources
+              (not found in lake catalog) that feed this flag via bounce re-engagement reset
+              and email-address-change detection logic.
+            ai_context:
+              synonyms:
+                - hard bounce
+                - undeliverable email
+                - permanent bounce
+
+          - name: email_address_soft_bounced_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_address_soft_bounced_flag
+            description: >
+              TRUE if the customer has 3 or more qualifying soft bounce events in the last
+              180 days (bounce_code IN ('SB','GB') from bouncesystem, or bounce_category =
+              'Soft bounce' from SFMC), occurring after the customer's most recent email
+              address change and before any re-engagement event. The 180-day window and
+              3-event threshold are both required. If the customer has no recorded email
+              change the window defaults to 1900-01-01 (all historical bounces count).
+              Source event tables — marketing_bouncesystem.bouncesystem_bounced_email_snap,
+              bouncesystem_bounced_email_log_snap, bouncesystem_bounce_type_snap,
+              sfmc_email_events_cln.sfmc_email_events_bounce_cln, sfmc_email_events_send_log_cln,
+              sfmc_email_events_open_cln, sfmc_email_events_click_cln, and
+              emailsystem.oc_emailqueue* tables — have no join keys on this fact; use this
+              pre-computed flag. Additionally, signals_platform_cln.oeg_email_event_send_cln,
+              signals_platform_cln.oeg_email_event_open_cln, and
+              signals_platform_cln.profile_audit_lake_cln_v2 are UNRESOLVED upstream sources
+              (not found in lake catalog) that feed this flag via bounce re-engagement reset
+              and email-address-change detection logic.
+            ai_context:
+              synonyms:
+                - soft bounce
+                - temporary email failure
+                - soft bounce flag
+
+          - name: etl_build_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: etl_build_mst_ts
+            dimension:
+              is_time: true
+            description: >
+              ETL pipeline build timestamp in Mountain Standard Time, computed as
+              FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP(), 'MST') at ETL execution time.
+              Use for staleness checks only — not a business event timestamp.
+            ai_context:
+              synonyms:
+                - load time
+                - build time
+                - etl timestamp
+                - pipeline run time
+
+      - name: customer
+        source: marketing_mart.customer
+        primary_key: [customer_id]
+        unique_keys:
+          - [customer_id]
+        description: >
+          GoDaddy customer dimension table. One row per customer_id. Provides demographic
+          and account attributes including geographic data (country_code, city_name),
+          email domain, account-type flags, and shopper profile. The ETL uses this table
+          as the base driving list for the final customer_suppression assembly and as
+          the source of join keys for computing restricted_country_flag and
+          competitor_email_flag.
+        ai_context:
+          synonyms:
+            - customer profile
+            - customer attributes
+            - customer dimension
+            - marketing_mart customer
+        fields:
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_id
+            description: "Primary key. Unique UUID customer identifier."
+            ai_context:
+              synonyms:
+                - customer UUID
+                - cust_id
+
+          - name: shopper_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: shopper_id
+            description: "GoDaddy numeric shopper identifier."
+            ai_context:
+              synonyms:
+                - shopper
+                - shopper number
+
+          - name: private_label_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: private_label_id
+            description: "Private label identifier associated with this customer's account."
+
+          - name: account_create_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: account_create_mst_ts
+            dimension:
+              is_time: true
+            description: "Account creation timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - account created date
+                - customer since
+                - signup date
+
+          - name: temporary_shopper_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: temporary_shopper_flag
+            description: >
+              TRUE if the customer is a temporary or guest shopper. Used as a filter in
+              the ETL join to dim_customer_vw — only non-temporary shoppers receive the
+              internal_account_flag lookup.
+            ai_context:
+              synonyms:
+                - guest shopper
+                - temp shopper
+
+          - name: city_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: city_name
+            description: >
+              Customer city name. Used in ETL for region-level restricted country matching
+              (city_name + country_code against gdshop_blocked_country_region_cln).
+            ai_context:
+              synonyms:
+                - city
+                - customer city
+
+          - name: state
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: state
+            description: "Customer state."
+            ai_context:
+              synonyms:
+                - state
+                - customer state
+
+          - name: zip_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: zip_code
+            description: "Customer postal code."
+            ai_context:
+              synonyms:
+                - postal code
+                - zip
+
+          - name: country_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: country_code
+            description: >
+              Customer country code (ISO format). Used in ETL to determine
+              restricted_country_flag on the fact by joining to gdshop_blocked_country_cln
+              and gdshop_blocked_country_region_cln. The fact table carries no country_code
+              column — geographic lookups must go through this dimension.
+            ai_context:
+              synonyms:
+                - country
+                - ISO country code
+
+          - name: parent_shopper_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: parent_shopper_id
+            description: "Parent shopper identifier for sub-account relationships."
+
+          - name: parent_customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: parent_customer_id
+            description: "Parent customer identifier for sub-account relationships."
+
+          - name: shopper_payment_type_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: shopper_payment_type_id
+            description: "Payment type identifier for the customer's account."
+
+          - name: email_address_hash
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_address_hash
+            description: "Hashed email address for PII-safe email matching."
+            ai_context:
+              synonyms:
+                - hashed email
+                - email hash
+
+          - name: email_domain
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_domain
+            description: >
+              Email domain of the customer. Used in ETL to compute competitor_email_flag
+              on the fact by tokenizing the domain and intersecting with a list of
+              approximately 40 competitor domain names.
+            ai_context:
+              synonyms:
+                - email domain
+                - customer email domain
+
+          - name: catalog_market_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: catalog_market_id
+            description: "Catalog market identifier for the customer."
+
+          - name: currency_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: currency_code
+            description: "Default currency code for the customer's account."
+            ai_context:
+              synonyms:
+                - currency
+                - default currency
+
+          - name: business_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: business_flag
+            description: "TRUE if the customer is a business account."
+            ai_context:
+              synonyms:
+                - business account
+                - is business
+
+          - name: web_pro_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: web_pro_flag
+            description: "TRUE if the customer is a Web Pro."
+            ai_context:
+              synonyms:
+                - web professional
+                - web pro
+
+          - name: client_of_web_pro_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: client_of_web_pro_flag
+            description: "TRUE if the customer is a client of a Web Pro."
+            ai_context:
+              synonyms:
+                - web pro client
+
+          - name: delegated_shopper_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: delegated_shopper_flag
+            description: "TRUE if the customer has delegated account access."
+            ai_context:
+              synonyms:
+                - delegated access
+                - delegated shopper
+
+          - name: federation_partner_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: federation_partner_id
+            description: "Federation partner identifier for federated identity customers."
+
+          - name: federation_partner_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: federation_partner_name
+            description: "Federation partner name for federated identity customers."
+
+          - name: etl_build_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: etl_build_mst_ts
+            dimension:
+              is_time: true
+            description: "ETL build timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - load time
+                - build time
+                - etl timestamp
+
+      - name: dim_customer_vw
+        source: customer360.dim_customer_vw
+        primary_key: [customer_id]
+        unique_keys:
+          - [customer_id]
+          - [shopper_id]
+        description: >
+          GoDaddy Customer 360 profile dimension view (Iceberg table). One row per
+          customer_id; shopper_id is also a unique key (@UniqueKey). Provides extended
+          customer profile data including internal_shopper_flag, phone presence flags, and
+          account lifecycle timestamps. The ETL joins this table to marketing_mart.customer
+          on shopper_id (where current_record_flag = TRUE and temporary_shopper_flag = FALSE)
+          to derive internal_account_flag on the customer_suppression fact. Always filter
+          current_record_flag = TRUE when joining to avoid fan-out.
+        ai_context:
+          synonyms:
+            - customer 360
+            - customer profile view
+            - dim customer
+            - customer dimension view
+        fields:
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_id
+            description: "Primary key (@PrimaryKey). Unique UUID customer identifier."
+            ai_context:
+              synonyms:
+                - customer UUID
+                - cust_id
+
+          - name: shopper_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: shopper_id
+            description: >
+              Unique key (@UniqueKey). Numeric GoDaddy shopper identifier. Used as the
+              join key from customer_suppression to this dimension. Always apply
+              current_record_flag = TRUE when joining this table to avoid fan-out.
+            ai_context:
+              synonyms:
+                - shopper
+                - shopper number
+
+          - name: external_reseller_customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: external_reseller_customer_id
+            description: "External reseller customer identifier."
+
+          - name: federation_partner_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: federation_partner_id
+            description: "Federation partner identifier."
+
+          - name: federation_partner_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: federation_partner_name
+            description: "Federation partner name."
+
+          - name: parent_customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: parent_customer_id
+            description: "Parent customer identifier for sub-account relationships."
+
+          - name: parent_shopper_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: parent_shopper_id
+            description: "Parent shopper identifier for sub-account relationships."
+
+          - name: private_label_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: private_label_id
+            description: "Private label identifier."
+
+          - name: company_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: company_flag
+            description: "TRUE if the account is a company."
+            ai_context:
+              synonyms:
+                - is company
+                - business account
+
+          - name: internal_shopper_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: internal_shopper_flag
+            description: >
+              TRUE if the customer is an internal GoDaddy shopper. This field is the
+              upstream source for customer_suppression.internal_account_flag on the fact,
+              joined on shopper_id where current_record_flag = TRUE and
+              marketing_mart.customer.temporary_shopper_flag = FALSE.
+            ai_context:
+              synonyms:
+                - internal shopper
+                - GoDaddy employee
+                - internal account
+
+          - name: temporary_shopper_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: temporary_shopper_flag
+            description: "TRUE if the customer is a temporary or guest shopper."
+            ai_context:
+              synonyms:
+                - guest shopper
+                - temp shopper
+
+          - name: closed_shopper_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: closed_shopper_flag
+            description: "TRUE if the shopper account is closed."
+            ai_context:
+              synonyms:
+                - closed account
+                - deactivated shopper
+
+          - name: city_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: city_name
+            description: "Customer city name."
+
+          - name: state_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: state_code
+            description: "Customer state code."
+
+          - name: zip_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: zip_code
+            description: "Customer postal code."
+
+          - name: country_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: country_code
+            description: "Customer country code."
+
+          - name: email_domain_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_domain_name
+            description: "Email domain name of the customer."
+            ai_context:
+              synonyms:
+                - email domain
+                - customer email domain
+
+          - name: email_hash
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email_hash
+            description: "Hashed email address for PII-safe email matching."
+            ai_context:
+              synonyms:
+                - hashed email
+                - email hash
+
+          - name: primary_phone_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: primary_phone_flag
+            description: "TRUE if a primary phone number is on file for this customer."
+
+          - name: mobile_phone_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: mobile_phone_flag
+            description: "TRUE if a mobile phone number is on file for this customer."
+
+          - name: secondary_phone_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: secondary_phone_flag
+            description: "TRUE if a secondary phone number is on file for this customer."
+
+          - name: default_currency_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: default_currency_code
+            description: "Default currency code for the customer's account."
+            ai_context:
+              synonyms:
+                - currency
+                - default currency
+
+          - name: market_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: market_code
+            description: "Market code for the customer."
+            ai_context:
+              synonyms:
+                - market
+                - customer market
+
+          - name: created_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: created_mst_ts
+            dimension:
+              is_time: true
+            description: "Account creation timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - account created
+                - customer since
+
+          - name: updated_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: updated_mst_ts
+            dimension:
+              is_time: true
+            description: "Last updated timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - last updated
+                - profile updated
+
+          - name: closed_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: closed_mst_ts
+            dimension:
+              is_time: true
+            description: "Account closure timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - account closed
+                - closed date
+
+          - name: deleted_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: deleted_mst_ts
+            dimension:
+              is_time: true
+            description: "Account deletion timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - account deleted
+                - deleted date
+
+          - name: current_record_flag
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: current_record_flag
+            description: >
+              TRUE if this is the most recent record for the shopper. Always filter on
+              current_record_flag = TRUE when joining to this dataset to avoid fan-out.
+              This is a required filter condition in the ETL join that derives
+              internal_account_flag on customer_suppression.
+            ai_context:
+              synonyms:
+                - current record
+                - latest record
+                - is current
+
+          - name: etl_build_mst_ts
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: etl_build_mst_ts
+            dimension:
+              is_time: true
+            description: "ETL build timestamp in Mountain Standard Time."
+            ai_context:
+              synonyms:
+                - load time
+                - build time
+                - etl timestamp
+
+    relationships:
+      - name: customer_suppression_to_customer
+        from: customer_suppression
+        to: customer
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: customer_suppression_to_dim_customer_vw
+        from: customer_suppression
+        to: dim_customer_vw
+        from_columns: [shopper_id]
+        to_columns: [shopper_id]
+
+    custom_extensions:
+      - vendor_name: GODADDY
+        data: |
+          {
+            "lake_table_path": "marketing-mart/customer-suppression",
+            "pyspark_path": "customer/eds-customer-suppression/src/pyspark/customer_suppression.py",
+            "dag_name": "customer_suppression",
+            "refresh_cadence": "Daily at 04:00 America/Phoenix (11:00 UTC)",
+            "sla_delivery": "cron(0 13 * * ? *) — delivered by 06:00 MST daily",
+            "data_tier": 3,
+            "domain": "customer",
+            "organization": "emerald-data-team-org@godaddy.com",
+            "pipeline_lineage": {
+              "intermediate_tables": [],
+              "transitive_sources": [],
+              "materialized_direct_reads": [
+                {
+                  "table": "ecomm_cln.gdshop_blocked_country_cln",
+                  "materialized_in_fields": ["restricted_country_flag"],
+                  "note": "Country-level block lookup; fact has no country_code column to join back; matched via marketing_mart.customer.country_code in ETL"
+                },
+                {
+                  "table": "ecomm_cln.gdshop_blocked_country_region_cln",
+                  "materialized_in_fields": ["restricted_country_flag"],
+                  "note": "Region-level block lookup (country_code + region_name); fact has no join keys; matched via marketing_mart.customer.country_code + city_name in ETL"
+                }
+              ],
+              "legacy_sources": []
+            },
+            "unresolved_upstream_tables": [
+              {
+                "table": "signals_platform_cln.oeg_email_event_send_cln",
+                "reason": "Not found in lake catalog (checked us-west-2/signals-platform-cln/ and dlms-api/us-west-2/signals-platform-cln/)",
+                "used_for": "OEG email send re-engagement reset — resets bounce flags when customer received a send on a later calendar day than most recent bounce",
+                "fields_on_fact": ["email_address_hard_bounced_flag", "email_address_soft_bounced_flag"]
+              },
+              {
+                "table": "signals_platform_cln.oeg_email_event_open_cln",
+                "reason": "Not found in lake catalog",
+                "used_for": "OEG email open re-engagement reset for bounce flags",
+                "fields_on_fact": ["email_address_hard_bounced_flag", "email_address_soft_bounced_flag"]
+              },
+              {
+                "table": "signals_platform_cln.profile_audit_lake_cln_v2",
+                "reason": "Not found in lake catalog",
+                "used_for": "Email address change detection — nullifies bounces when customer updated email after last bounce",
+                "fields_on_fact": ["email_address_hard_bounced_flag", "email_address_soft_bounced_flag"]
+              }
+            ],
+            "do_not_claim": [
+              {
+                "item": "signals_platform_cln.oeg_email_event_send_cln as OSI dataset",
+                "reason": "UNRESOLVED lineage; not found in lake catalog",
+                "preserved_in": ["custom_extensions", "email_address_hard_bounced_flag.description", "email_address_soft_bounced_flag.description", "ai_context.instructions"]
+              },
+              {
+                "item": "signals_platform_cln.oeg_email_event_open_cln as OSI dataset",
+                "reason": "UNRESOLVED lineage; not found in lake catalog",
+                "preserved_in": ["custom_extensions", "email_address_hard_bounced_flag.description", "email_address_soft_bounced_flag.description", "ai_context.instructions"]
+              },
+              {
+                "item": "signals_platform_cln.profile_audit_lake_cln_v2 as OSI dataset",
+                "reason": "UNRESOLVED lineage; not found in lake catalog",
+                "preserved_in": ["custom_extensions", "email_address_hard_bounced_flag.description", "email_address_soft_bounced_flag.description", "ai_context.instructions"]
+              },
+              {
+                "item": "marketing_mart_local.customer_suppression_history as OSI dataset",
+                "reason": "In-repo staging/history table; not registered in lake catalog; written by secondary history script (main_to_history_ckpetl_eds_ss.py)",
+                "preserved_in": ["custom_extensions"]
+              },
+              {
+                "item": "excluded_email_flag as reliable boolean indicator",
+                "reason": "Always NULL in current PySpark code (NULL AS excluded_email_flag); FortKnox source not yet wired",
+                "preserved_in": ["excluded_email_flag.description"]
+              },
+              {
+                "item": "bad_email_address_format_flag as reliable boolean indicator",
+                "reason": "Always NULL in current PySpark code (NULL AS bad_email_address_format_flag); FortKnox source not yet wired",
+                "preserved_in": ["bad_email_address_format_flag.description"]
+              },
+              {
+                "item": "cust_customertracking.shopper_crossover_cln as OSI dimension dataset",
+                "reason": "pool_13_active_flag fully materialized on fact as private_label_13_suppression_flag; including as dimension would duplicate data and mislead analysts",
+                "preserved_in": ["custom_extensions", "private_label_13_suppression_flag.description"]
+              },
+              {
+                "item": "marketing_bouncesystem.*, sfmc_email_events_cln.*, emailsystem.oc_* tables as OSI dimension datasets",
+                "reason": "Source event/transaction logs; no join key from fact to these tables; values aggregated via multi-step ETL chain into hard/soft bounce boolean flags",
+                "preserved_in": ["custom_extensions", "email_address_hard_bounced_flag.description", "email_address_soft_bounced_flag.description", "ai_context.instructions"]
+              },
+              {
+                "item": "terrorist_country_flag as OSI field",
+                "reason": "Appears in Confluence legacy design but absent from current DDL and PySpark; merged into restricted_country_flag in current implementation",
+                "preserved_in": ["ai_context.instructions", "restricted_country_flag.description"]
+              },
+              {
+                "item": "fortknox.tdaemailattributes_snap as OSI dataset or bounce source",
+                "reason": "Confluence documents as bounce source; current PySpark uses bouncesystem/SFMC tables instead; FortKnox not present in current ETL",
+                "preserved_in": ["ai_context.instructions", "excluded_email_flag.description", "bad_email_address_format_flag.description"]
+              }
+            ],
+            "query_guards": {
+              "grain": "one row per customer_id (LATEST_SNAPSHOT; full replacement each daily run)",
+              "partition_filter": null,
+              "primary_key_notes": "Single PK: customer_id (UUID string); shopper_id is also on the fact but is NOT unique — one shopper may have multiple customer_ids"
+            }
+          }
