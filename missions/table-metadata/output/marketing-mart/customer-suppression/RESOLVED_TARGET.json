@@ -1,0 +1,15 @@
+{
+  "schema": "marketing_mart",
+  "table_hyphen": "customer-suppression",
+  "table_underscore": "customer_suppression",
+  "lake_table_path": "marketing-mart/customer-suppression",
+  "confidence": "high",
+  "evidence": [
+    "PySpark customer_suppression.py: transform_stg(spark, logger, database_name, table_name, table_path, source_df) called with args -d marketing_mart_local -t customer_suppression",
+    "DAG customer_suppression_dag.py: SuccessNotificationOperator (datalake_success_cs task) targets marketing_mart.customer_suppression in prod",
+    "repos/lake/catalog/config/prod/us-west-2/marketing-mart/customer-suppression/table.yaml — sloIdentifier: marketing_mart.customer_suppression; table_type: LATEST_SNAPSHOT",
+    "repos/lake/catalog/config/prod/us-west-2/marketing-mart/customer-suppression/table.ddl — 11 columns exactly match PySpark final SELECT",
+    "policies/customer_suppression_dag.yaml — outputs list: marketing_mart.customer_suppression",
+    "data_quality/constraints/customer_suppression.json — database: marketing_mart, table: customer_suppression, isPrimaryKey(customer_id)"
+  ]
+}
