@@ -20,3 +20,4 @@ The PySpark script and its calling DAG are the source of truth.
 ## ALATION
 - Enabled: true
 - Search query override: 
+- Max queries (most recently saved, include in B2): 10

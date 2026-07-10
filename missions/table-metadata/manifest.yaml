@@ -137,9 +137,10 @@ plan:
            Construct Alation URLs as: `https://godaddy.alationcloud.com/table/<ID>/`
 
         4. Record in gather.md under "## Alation" a structured block:
-           - Redshift Dev Serverless table (dev.* key): name, database ("Redshift - Serverless - Dev"), schema, Alation URL
-           - Lake table: name, schema, Alation URL
-           - Any descriptions or custom fields found
+           - Redshift Dev Serverless table (dev.* key): name, database ("Redshift - Serverless - Dev"), schema, Alation URL, Table ID, Type (e.g., View, Table)
+           - Lake table: name, database ("GoDaddy Central Data Lake (Prod)"), schema, Alation URL, Lake Alation ID, Type
+           - Table description (if available)
+           - Column profiling data if available (sample values, distinct count, null count, min/max, common values) — for C1 Sample Values and Key Statistics columns
 
         ## Step 6b: Fetch Alation queries referencing this table
 
@@ -179,10 +180,11 @@ plan:
         - Any DDL/policy/DQ files consulted and what they claim
         - Confluence summaries (if any)
         - Alation section with:
-          - Redshift Dev Serverless table info (dev.* entry: table name, database, schema, Alation URL)
-          - Lake table Alation URL
-          - Any descriptions or custom fields retrieved
+          - Redshift Dev Serverless table info (dev.* entry: table name, database, schema, Alation URL, Table ID, Type, description)
+          - Lake table info (name, database, schema, Alation URL, Lake Alation ID, Type)
+          - Column profiling data (sample values, statistics) if retrieved
         - Alation Queries section (full query details per Step 6b)
+        - Multi-depth lineage from Alation or lake registry (if available): Depth 1/2 upstream, Depth 1 downstream
         - A "Conflicts / discrepancies" section listing any contradictions with the code
 
     - name: analyze
@@ -241,14 +243,14 @@ plan:
            Record: `UNRESOLVED: <table_name> — <what you searched and why it failed>`
 
         **CRITICAL RULE FOR C1 (Column Reference):**
-        The "Source Table(s)" column in C1 must show the FIRST lake table encountered in the
-        lineage chain — NOT the lake table's own upstream sources. For example, if the PySpark
-        reads from `customer_core_conformed.customer_life_cycle` which resolves to lake table
-        `customer360.customer_life_cycle_vw`, then ALL columns sourced from it must show
-        `customer360.customer_life_cycle_vw` — NOT the tables that feed customer_life_cycle_vw.
-        - BAD:  `enterprise.dim_subscription` (this is a source of the UPSTREAM lake table, not this table)
-        - BAD:  `customer_core_conformed.active_customer_stg` (this is an intermediate table)
-        - GOOD: `customer360.customer_life_cycle_vw` (the first lake table in the chain)
+        The "Column Lineage" column in C1 must describe how each column is derived, referencing
+        the FIRST lake table and column in the lineage chain — NOT the lake table's own upstream
+        sources. Use descriptive transformation text (not just table names). For example:
+        - BAD:  `enterprise.dim_subscription.sub_id` (upstream of an upstream lake table)
+        - BAD:  `customer_core_conformed.active_customer_stg.shopper_id` (intermediate table)
+        - GOOD: `Direct mapping from enterprise.dim_subscription_history.shopper_id`
+        - GOOD: `Calculated as datediff(partition_eval_mst_date, customer_acquisition_mst_date) / 365`
+        - GOOD: `Derived from dim_new_acquisition_shopper.new_acquisition_bill_id or dim_subscription_history.original_bill_id for new/intraday customers`
         - GOOD: `UNRESOLVED — requires manual input` (if traversal failed)
 
         Only trace THROUGH a lake table if the PySpark directly reads from multiple tables and
@@ -262,9 +264,14 @@ plan:
 
         Also read the target table's own lake registry artifacts (table.ddl, table.yaml).
 
-        Build a column-level mapping: `target_column -> source_lake_table.column`
+        Build a column-level mapping for C1:
+        `# | name | data_type | description | column_lineage | category | sample_values | key_statistics`
         (If intermediates exist between the target and the lake source, note the chain but
-        the final C1 mapping must reference only the first lake table reached.)
+        the final C1 Column Lineage must describe only the first lake table.column reached.)
+        Classify each column's category as one of: `Identifier`, `Categorical`, `Date`,
+        `Numeric`, `Boolean`, `Text`, `Amount`, `Timestamp`, `Array`.
+        For Sample Values and Key Statistics: pull from gather.md Alation profiling if available;
+        otherwise leave empty — do NOT fabricate.
 
         ## Step 5: Derive analysis outputs (no guessing)
         Derive the following, strictly from code + resolved lake artifacts:
@@ -275,8 +282,15 @@ plan:
         - Common business metrics computed in the ETL (name + definition + grain)
         - **Column-level lineage** (CRITICAL): for EACH column in the target table, trace it
           to the FIRST upstream lake table and column. Do NOT trace further into that lake
-          table's own sources. If the column is computed/derived, note the formula AND the
-          direct lake source columns feeding it. If lineage cannot be resolved, mark as UNRESOLVED.
+          table's own sources. Write Column Lineage as descriptive transformation text
+          (e.g., "Direct mapping from dim_country_vw.country_name joined on acquisition
+          country code" or "Calculated as datediff(partition_eval_mst_date,
+          customer_acquisition_mst_date) / 365"). Classify each column's category as one of:
+          `Identifier`, `Categorical`, `Date`, `Numeric`, `Boolean`, `Text`, `Amount`,
+          `Timestamp`, `Array`. If lineage cannot be resolved, mark as UNRESOLVED.
+        - **Multi-depth lineage for D1**: from lake table.yaml lineage metadata and Alation
+          (if in gather.md), build Depth 1 and Depth 2 upstream tables and Depth 1 downstream
+          tables. Each entry: Table Name | Database | Schema | Type | Platform.
         - SLA/refresh schedule from the DAG (cron, dependencies, expected latency)
 
         ## Step 6: Output (append to analyze.md)
@@ -286,7 +300,15 @@ plan:
           | Source Table (from code) | Resolved To (First Lake Table) | Resolution Method |
           Include UNRESOLVED entries with explanation of what was searched.
           Do NOT list a lake table's own upstream sources — stop at the lake boundary.
-        - Column-level lineage mapping (target_column -> first_lake_table.column) for all columns
+        - Column-level lineage mapping table for all columns:
+          | # | Name | Data Type | Description | Column Lineage | Category | Sample Values | Key Statistics |
+          Use descriptive transformation text for Column Lineage. Leave Sample Values and
+          Key Statistics empty if not available from gather.md — do NOT fabricate.
+        - **Multi-depth lineage tables for D1** (if resolvable):
+          - Depth 1 Upstream Tables (with total count)
+          - Depth 2 Upstream Tables (with total count)
+          - Depth 1 Downstream Tables (with total count)
+          Columns: Table Name | Database | Schema | Type | Platform
         - A structured "facts" block for each of the 20 sections (A1..E3) listing
           what can be filled and what is missing
         - A "Do not claim" list: items that are tempting but not proven
@@ -361,6 +383,7 @@ plan:
           - `### E1. Data Quality Checks`
           - `### E2. Best Practices & Tips`
           - `### E3. Related Articles & Documentation`
+        - `## REFERENCES` (deduplicated list at end of document)
 
         Content guidance (follow the PDF):
         - A1 should be a compact key-value table. The FIRST rows must be the access/identity
@@ -369,48 +392,92 @@ plan:
             2. Database — always "Redshift - Serverless - Dev" (use the dev.* entry, never bi.*)
             3. Schema (the Redshift schema, e.g. `customer360`)
             4. Alation URL (link to the dev Redshift Serverless table entry in Alation)
-            5. Lake Alation URL (link to the Lake table entry in Alation)
-          Then continue with the remaining technical metadata (Lake Table, Grain, Partition Key,
+            5. Table ID (Alation table ID for the Redshift entry)
+            6. Type (e.g., View, Table)
+            7. Description (brief table description from Alation or Confluence)
+            8. Lake Table Name
+            9. Lake Database — "GoDaddy Central Data Lake (Prod)"
+            10. Lake Schema
+            11. Lake Alation URL
+            12. Lake Alation ID
+          Then continue with the remaining technical metadata (Grain, Partition Key,
           Storage Format, Data Tier, SLA, Refresh Cadence, etc.).
           If Alation was skipped or URLs are unavailable, omit those rows but keep the rest.
           A1 MUST include grain.
+        - A2 should include a narrative paragraph, a "Key Features:" bullet list, and a
+          purpose statement explaining business value (similar to sample format).
         - B2 must contain TWO parts:
-          1. **Questions this table answers** — bullet list of natural-language questions.
+          1. **Questions this table answers** — bullet list of natural-language questions (optional
+             if Alation queries are available; sample format leads with query cards).
           2. **Alation Queries** (if gather.md has ## Alation Queries with results) — for EACH
              query, use this format (use empty string if a field is unknown):
 
-             #### Query: <Title or "Untitled">
+             #### <Title>
 
              | Field | Value |
              |---|---|
              | Query ID | <id> |
              | Title | <title> |
-             | Author | <author> |
+             | Author | <author or "Not specified"> |
              | Description | <description> |
-             | Schedule | <schedule or "Not scheduled"> |
+             | Schedule | <schedule or "Manual execution"> |
              | Last Saved | <date> |
-             | Last Run | <date> |
+             | Last Run | <date or "Not recorded"> |
              | Datasource | <datasource> |
-             | Alation Query URL | <url> |
+             | Alation Query URL | <url or "Query #<id>"> |
 
-             ```sql
-             <SQL verbatim — do not modify>
-             ```
+             Follow the metadata table with a 1-2 sentence descriptive paragraph explaining
+             what the query does and how it uses this table. Do NOT include the full SQL body
+             in B2 (keep B2 readable; reference the Alation URL instead).
 
-             If Alation was skipped or no queries were found, omit the Alation Queries part.
-        - C1 should be a single readable schema table with a "Source Table(s)" column.
-          **CRITICAL C1 RULE**: The "Source Table(s)" column must show the FIRST upstream
-          lake table in the lineage chain — NOT that lake table's own sources. For example:
-            - If PySpark reads from an intermediate that resolves to lake table X, show X.
-            - If PySpark reads directly from lake table X, show X.
-            - Do NOT trace into X's own upstream sources and list those instead.
-            - External systems (e.g., "S3 direct read") are also acceptable.
-            - `UNRESOLVED - requires manual input` if analyze.md marked it unresolved.
-          NEVER list intermediate/local/staging tables (e.g., `*_stg`, `*_conformed.*`,
-          `*_driver`) as sources. These are implementation details.
+             If Alation was skipped or no queries were found, use the "Questions this table
+             answers" bullet list instead.
+        - C1 should be a single readable schema table with EXACTLY these columns:
+          | # | Name | Data Type | Description | Column Lineage | Category | Sample Values | Key Statistics |
+          Column definitions:
+          - **#**: Row number (1-based)
+          - **Name**: Column name (no backticks in cell — plain name)
+          - **Data Type**: SQL data type (uppercase, e.g., STRING, DATE, INTEGER)
+          - **Description**: Business-facing description; include PK/UK/@ForeignKey annotations if in DDL
+          - **Column Lineage**: Descriptive transformation text referencing the first lake
+            table.column (e.g., "Direct mapping from dim_country_vw.country_name joined on
+            acquisition country code" or "Calculated as datediff(partition_eval_mst_date,
+            customer_acquisition_mst_date) / 365"). Use `UNRESOLVED - requires manual input`
+            if analyze.md marked it unresolved.
+          - **Category**: Classify each column as one of: `Identifier`, `Categorical`, `Date`,
+            `Numeric`, `Boolean`, `Text`, `Amount`, `Timestamp`, `Array`
+          - **Sample Values**: JSON array of 3-5 representative values from Alation profiling
+            (gather.md). Leave empty if not available — do NOT fabricate.
+          - **Key Statistics**: Brief stats from Alation profiling: distinct count, value range,
+            average, null count, common values. Leave empty if not available — do NOT fabricate.
+          Do NOT include extra columns (e.g., "Source Table(s)", "Transformation / Notes").
+          **CRITICAL C1 RULE**: Column Lineage must describe derivation from the FIRST upstream
+          lake table — NOT that lake table's own sources. NEVER list intermediate/local/staging
+          tables (e.g., `*_stg`, `*_conformed.*`, `*_driver`) as sources.
+        - D1 should use multi-depth lineage tables when available from analyze.md or gather.md:
+          - **Upstream Sources**
+            - Depth 1 Upstream Tables (Total: N)
+            - Depth 2 Upstream Tables (Total: N) — only if resolvable
+          - **Downstream Sources**
+            - Depth 1 Downstream Tables (Total: N)
+          Each table: | Table Name | Database | Schema | Type | Platform |
+          Platform values: `lake`, `redshift`, `s3`, or `—` for unknown.
+          If multi-depth lineage is unavailable, fall back to a flat list of direct upstream
+          lake tables with their roles.
         - C8 should include 2-5 short, annotated query patterns (avoid huge queries; keep focused).
         - D2 should identify repo + file paths + orchestration tool + compute platform.
-        - D4 should summarize creation logic (no long code walk-through).
+        - D4 must use these sub-sections (in order):
+          1. **ETL Processes** — narrative paragraph describing the pipeline, followed by
+             numbered implementation steps (dependency checks, EMR, transformations, persistence, DQ)
+          2. **Data Processing Steps** — bullet list of key transformation logic (status derivation,
+             enrichment joins, aggregations, derived columns, special-case handling)
+          3. **Error Handling and Logging** — bullet list (Slack alerts, retries, cluster lifecycle, etc.)
+          4. **Data Validation** — bullet list (DQ operators, business rule checks, partition validation)
+          Keep each sub-section concise; no long code walk-through.
+        - **REFERENCES** section at the end of the document: deduplicated list of:
+          - Main Table and Lake Table identifiers (schema.table)
+          - All Confluence article titles referenced in the doc
+          - All URLs (Alation table/article links, Confluence, GitHub repo/file links, Query links)
 
         ### Requirements
         - If a section cannot be completed accurately, include:
@@ -454,14 +521,29 @@ plan:
         pointing to the dev.* table) as the primary access identity. This is BY DESIGN — do not
         change it to "AWS Data Catalog" or any other value.
 
-        ## Step 2b: C1 Source Table validation (CRITICAL)
-        Scan the C1 "Source Table(s)" column in TABLE_METADATA.md. For EACH entry:
+        ## Step 2b: C1 Column Lineage validation (CRITICAL)
+        Scan the C1 "Column Lineage" column in TABLE_METADATA.md. For EACH entry:
         - If it references a local/intermediate/staging table (look for patterns like `*_stg`,
           `*_conformed.*`, `*_driver`, `analytic_local.*`, or any table NOT in the lake registry),
           this is a FAILURE. Replace it with:
-          - The actual lake table if analyze.md resolved it
+          - Descriptive transformation text referencing the actual lake table.column if analyze.md resolved it
           - `UNRESOLVED - requires manual input` if analyze.md could not resolve it
         - Only lake tables (those in `repos/lake/`) or external systems are acceptable as sources.
+        - Verify C1 uses EXACTLY these columns: #, Name, Data Type, Description, Column Lineage,
+          Category, Sample Values, Key Statistics. Remove any extra columns (e.g., "Source Table(s)",
+          "Transformation / Notes").
+        - Verify each row has a Category value from: Identifier, Categorical, Date, Numeric,
+          Boolean, Text, Amount, Timestamp, Array.
+        - Verify Sample Values and Key Statistics are empty (not fabricated) if gather.md had no
+          Alation profiling data.
+
+        ## Step 2c: Structure validation (sample format)
+        - Verify A1 includes Table ID, Type, Description, Lake Database, Lake Alation ID when
+          available in gather.md.
+        - Verify D1 uses multi-depth upstream/downstream tables when analyze.md provides them.
+        - Verify D4 has sub-sections: ETL Processes, Data Processing Steps, Error Handling and
+          Logging, Data Validation.
+        - Verify a REFERENCES section exists at the end of the document.
 
         ## Step 3: Completeness validation
         Ensure all 20 sections exist with the correct headings. If missing, add them.

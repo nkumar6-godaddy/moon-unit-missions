@@ -1,0 +1,17 @@
+{
+  "schema": "customer360",
+  "table_hyphen": "customer-metric-daily-agg-vw",
+  "table_underscore": "customer_metric_daily_agg_vw",
+  "lake_table_path": "customer360/customer-metric-daily-agg-vw",
+  "confidence": "high",
+  "evidence": [
+    "PySpark line 438: df.repartition(1).write.insertInto('customer_core_conformed.customer_metric_daily_agg', overwrite=True)",
+    "Hive DDL (customer_metric_daily_agg.ddl): LOCATION 's3://gd-ckpetlbatch-{AWS_ENV}-customer-core-conformed/customer_core_conformed/customer_metric_daily_agg/'",
+    "Lake registry: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-metric-daily-agg-vw/table.yaml — table_relative_path: customer_metric_daily_agg",
+    "Lake config.yaml: database_name=customer360, database_root=gd-ckpetlbatch-prod-customer-core-conformed, path_to_database=customer_core_conformed",
+    "DAG task call_lake_api: SuccessNotificationOperator for customer360.customer_metric_daily_agg_vw (prod)",
+    "policies.yaml output 1: customer360.customer_metric_daily_agg_vw (datalake, parquet)",
+    "Alation lake entry: 81.AwsDataCatalog.customer360.customer_metric_daily_agg_vw (ID: 7038346)",
+    "S3 path identity confirms customer_core_conformed.customer_metric_daily_agg (Hive) == customer360.customer_metric_daily_agg_vw (lake)"
+  ]
+}

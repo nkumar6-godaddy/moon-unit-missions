@@ -1,0 +1,26 @@
+# Configuration for Snowflake Semantic View Generation Mission
+# Target: customer360.customer_life_cycle_vw (Customer Lifecycle table)
+
+target:
+  pyspark_url: "https://github.com/gdcorp-dna/dof-dpaas-customer-feature/blob/main/customer360/customer-metrics/src/pyspark/customer_life_cycle.py"
+  lake_table_override: null
+  semantic_model_name: null
+  snowflake_database: "MARKETING_CORE_DEV"
+
+notes: |
+  Don't use the customer_state_enum column to derive any metrics, it is an internal column for auditing purposes only and should not be used. 
+  Always use the date columns to determine the state of the customer. Example: if acquisition date is equal to the partition date then it is a new customer.
+
+sources:
+  confluence_pages:
+    - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3779199819/Customer360"
+      description: "Customer360 design specification — overall Customer360 schema architecture and column definitions"
+    - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3970861345/Customer+Lifecycle"
+      description: "Customer Lifecycle design — lifecycle stages, transitions, and business logic for customer lifecycle view"
+
+  alation:
+    enabled: true
+    search_query: null
+    max_queries: 10
+
+  additional_docs: []

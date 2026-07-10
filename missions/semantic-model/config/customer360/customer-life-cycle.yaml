@@ -11,11 +11,13 @@ notes: |
 sources:
   confluence_pages:
     - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3779199819/Customer360"
-      description: "Customer360 parent page — explore child pages for relevant table documentation"
+      description: "Customer360 design specification — overall Customer360 schema architecture and column definitions"
+    - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3970861345/Customer+Lifecycle"
+      description: "Customer Lifecycle design — lifecycle stages, transitions, and business logic for customer lifecycle view"
 
   alation:
     enabled: true
     search_query: null
-    max_queries: 5
+    max_queries: 10
 
   additional_docs: []

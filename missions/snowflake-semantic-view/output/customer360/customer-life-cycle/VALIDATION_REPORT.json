@@ -1,0 +1,929 @@
+{
+  "file": "SNOWFLAKE_SEMANTIC_VIEW.yaml",
+  "summary": {
+    "total_checks": 131,
+    "passed": 131,
+    "warnings": 0,
+    "failed": 0,
+    "overall": "PASS"
+  },
+  "checks": [
+    {
+      "check_id": "S01",
+      "category": "structural",
+      "description": "Root has 'name' (non-empty string)",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S02",
+      "category": "structural",
+      "description": "Root has 'tables' (non-empty list)",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S03_0",
+      "category": "structural",
+      "description": "tables[0] has 'name'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S04_0",
+      "category": "structural",
+      "description": "tables[0] has valid 'base_table'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[0]",
+      "category": "structural",
+      "description": "tables[0].dimensions[0] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[0]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[0] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[0]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[0] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[1]",
+      "category": "structural",
+      "description": "tables[0].dimensions[1] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[1]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[1] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[1]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[1] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[2]",
+      "category": "structural",
+      "description": "tables[0].dimensions[2] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[2]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[2] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[2]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[2] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[3]",
+      "category": "structural",
+      "description": "tables[0].dimensions[3] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[3]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[3] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[3]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[3] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[4]",
+      "category": "structural",
+      "description": "tables[0].dimensions[4] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[4]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[4] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[4]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[4] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[5]",
+      "category": "structural",
+      "description": "tables[0].dimensions[5] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[5]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[5] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[5]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[5] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[6]",
+      "category": "structural",
+      "description": "tables[0].dimensions[6] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[6]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[6] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[6]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[6] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[7]",
+      "category": "structural",
+      "description": "tables[0].dimensions[7] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[7]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[7] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[7]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[7] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[8]",
+      "category": "structural",
+      "description": "tables[0].dimensions[8] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[8]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[8] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[8]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[8] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[9]",
+      "category": "structural",
+      "description": "tables[0].dimensions[9] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[9]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[9] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[9]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[9] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[10]",
+      "category": "structural",
+      "description": "tables[0].dimensions[10] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[10]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[10] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[10]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[10] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[11]",
+      "category": "structural",
+      "description": "tables[0].dimensions[11] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[11]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[11] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[11]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[11] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[12]",
+      "category": "structural",
+      "description": "tables[0].dimensions[12] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[12]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[12] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[12]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[12] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[13]",
+      "category": "structural",
+      "description": "tables[0].dimensions[13] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[13]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[13] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[13]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[13] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[14]",
+      "category": "structural",
+      "description": "tables[0].dimensions[14] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[14]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[14] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[14]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[14] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[15]",
+      "category": "structural",
+      "description": "tables[0].dimensions[15] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[15]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[15] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[15]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[15] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[16]",
+      "category": "structural",
+      "description": "tables[0].dimensions[16] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[16]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[16] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[16]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[16] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[17]",
+      "category": "structural",
+      "description": "tables[0].dimensions[17] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[17]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[17] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[17]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[17] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[18]",
+      "category": "structural",
+      "description": "tables[0].dimensions[18] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[18]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[18] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[18]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[18] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[19]",
+      "category": "structural",
+      "description": "tables[0].dimensions[19] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[19]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[19] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[19]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[19] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[20]",
+      "category": "structural",
+      "description": "tables[0].dimensions[20] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[20]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[20] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[20]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[20] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[21]",
+      "category": "structural",
+      "description": "tables[0].dimensions[21] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[21]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[21] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[21]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[21] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[22]",
+      "category": "structural",
+      "description": "tables[0].dimensions[22] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[22]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[22] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[22]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[22] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[23]",
+      "category": "structural",
+      "description": "tables[0].dimensions[23] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[23]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[23] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[23]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[23] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].dimensions[24]",
+      "category": "structural",
+      "description": "tables[0].dimensions[24] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].dimensions[24]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[24] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].dimensions[24]",
+      "category": "semantic",
+      "description": "tables[0].dimensions[24] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[0]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[0] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[0]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[0] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[0]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[0] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[1]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[1] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[1]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[1] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[1]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[1] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[2]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[2] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[2]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[2] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[2]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[2] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[3]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[3] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[3]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[3] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[3]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[3] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[4]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[4] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[4]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[4] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[4]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[4] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[5]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[5] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[5]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[5] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[5]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[5] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].time_dimensions[6]",
+      "category": "structural",
+      "description": "tables[0].time_dimensions[6] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].time_dimensions[6]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[6] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].time_dimensions[6]",
+      "category": "semantic",
+      "description": "tables[0].time_dimensions[6] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].facts[0]",
+      "category": "structural",
+      "description": "tables[0].facts[0] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].facts[0]",
+      "category": "semantic",
+      "description": "tables[0].facts[0] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].facts[0]",
+      "category": "semantic",
+      "description": "tables[0].facts[0] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].facts[1]",
+      "category": "structural",
+      "description": "tables[0].facts[1] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].facts[1]",
+      "category": "semantic",
+      "description": "tables[0].facts[1] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].facts[1]",
+      "category": "semantic",
+      "description": "tables[0].facts[1] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].facts[2]",
+      "category": "structural",
+      "description": "tables[0].facts[2] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M02_tables[0].facts[2]",
+      "category": "semantic",
+      "description": "tables[0].facts[2] non-metric expr is scalar",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M04_tables[0].facts[2]",
+      "category": "semantic",
+      "description": "tables[0].facts[2] data_type is valid Snowflake type",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[0]",
+      "category": "structural",
+      "description": "tables[0].metrics[0] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[0]",
+      "category": "semantic",
+      "description": "tables[0].metrics[0] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[1]",
+      "category": "structural",
+      "description": "tables[0].metrics[1] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[1]",
+      "category": "semantic",
+      "description": "tables[0].metrics[1] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[2]",
+      "category": "structural",
+      "description": "tables[0].metrics[2] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[2]",
+      "category": "semantic",
+      "description": "tables[0].metrics[2] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[3]",
+      "category": "structural",
+      "description": "tables[0].metrics[3] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[3]",
+      "category": "semantic",
+      "description": "tables[0].metrics[3] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[4]",
+      "category": "structural",
+      "description": "tables[0].metrics[4] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[4]",
+      "category": "semantic",
+      "description": "tables[0].metrics[4] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[5]",
+      "category": "structural",
+      "description": "tables[0].metrics[5] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[5]",
+      "category": "semantic",
+      "description": "tables[0].metrics[5] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[6]",
+      "category": "structural",
+      "description": "tables[0].metrics[6] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[6]",
+      "category": "semantic",
+      "description": "tables[0].metrics[6] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S06_tables[0].metrics[7]",
+      "category": "structural",
+      "description": "tables[0].metrics[7] has 'name' and 'expr'",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "M01_tables[0].metrics[7]",
+      "category": "semantic",
+      "description": "tables[0].metrics[7] metric expr contains aggregate",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S11_tables[0]",
+      "category": "structural",
+      "description": "tables[0] entity names unique within table",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "S10",
+      "category": "structural",
+      "description": "Table names are unique",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "V02_0",
+      "category": "structural",
+      "description": "verified_queries[0] has required fields",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "V02_1",
+      "category": "structural",
+      "description": "verified_queries[1] has required fields",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "V02_2",
+      "category": "structural",
+      "description": "verified_queries[2] has required fields",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "check_id": "C01",
+      "category": "structural",
+      "description": "'custom_instructions' is a string",
+      "status": "PASS",
+      "details": []
+    }
+  ]
+}

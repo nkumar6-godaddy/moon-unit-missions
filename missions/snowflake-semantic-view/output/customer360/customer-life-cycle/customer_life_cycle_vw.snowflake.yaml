@@ -1,0 +1,634 @@
+name: customer360_customer_life_cycle_vw
+description: >-
+  Analytic dataset for Customer Life Cycle — a comprehensive daily snapshot tracking the complete
+  lifecycle journey of GoDaddy customers from acquisition through active, churned, merged, and
+  reactivated states. Provides the single source of truth for all customer lifecycle metrics,
+  replacing legacy finance_cln.active_customer, finance_cln.active_customer_history, and
+  customer_mart.two_plus_active_customer datasets. Includes trailing twelve month (TTM) gross
+  cash received (GCR), product ownership, acquisition attributes, and geographic data for ALL
+  customers (not just active). Data is produced daily at 7:20 AM MST (SLA 8:00 AM MST) at
+  grain: one row per shopper per evaluation date.
+
+tables:
+  - name: customer_life_cycle
+    description: >-
+      Daily snapshot of customer lifecycle state and attributes.
+      Grain: one row per (customer_id, partition_eval_mst_date). Fully denormalized — all
+      dimension attributes are pre-joined and materialized into this single table. Composite
+      primary key: (customer_id, partition_eval_mst_date). Partition key: partition_eval_mst_date.
+    base_table:
+      database: MARKETING_CORE_DEV
+      schema: CONFORMED
+      table: customer_life_cycle_vw
+    dimensions:
+
+      - name: customer_id
+        description: >-
+          Unique UUID representing the customer entity across GoDaddy systems. Composite primary
+          key component; may be NULL for some shoppers. Sourced from
+          customer_core_conformed.active_customer_stg.customer_id, ultimately from
+          enterprise.dim_subscription_history.customer_id. COALESCE logic used in joins to handle
+          nulls. Derived from enterprise.dim_subscription_history via
+          customer_core_conformed.active_customer_stg; not directly joinable.
+        expr: customer_id
+        data_type: VARCHAR
+        synonyms:
+          - customer id
+          - customer uuid
+
+      - name: customer_acquisition_bill_id
+        description: >-
+          Bill ID that triggered the first net-positive payment for this customer. Multi-case COALESCE
+          logic: for new/intraday customers COALESCE(enterprise.dim_new_acquisition_shopper.new_acquisition_bill_id,
+          enterprise.dim_subscription_history.original_bill_id); for existing/churned customers
+          enterprise.dim_new_acquisition_shopper.new_acquisition_bill_id only. Derived from
+          enterprise.dim_new_acquisition_shopper.new_acquisition_bill_id (primary) with fallback
+          to enterprise.dim_subscription_history.original_bill_id via CASE logic in ETL.
+        expr: customer_acquisition_bill_id
+        data_type: VARCHAR
+        synonyms:
+          - acquisition bill id
+          - first bill id
+
+      - name: customer_acquisition_mst_month
+        description: >-
+          Month of customer acquisition truncated to the first day of the month, stored as
+          YYYY-MM-DD string. Derived as TRUNC(customer_acquisition_mst_date, 'MONTH') from the
+          acquisition date resolved via enterprise.dim_new_acquisition_shopper and
+          enterprise.dim_subscription_history CASE logic. Useful for cohort analysis by
+          acquisition month.
+        expr: customer_acquisition_mst_month
+        data_type: VARCHAR
+        synonyms:
+          - acquisition month
+          - cohort month
+
+      - name: customer_acquisition_country_code
+        description: >-
+          ISO country code where the customer was acquired. Derived from
+          enterprise.dim_new_acquisition_shopper.bill_country_code, uppercased with UK→GB
+          normalization applied via CASE WHEN UPPER(bill_country_code) = 'UK' THEN 'GB'
+          ELSE UPPER(bill_country_code) END in ETL. Materialized directly from
+          enterprise.dim_new_acquisition_shopper.
+        expr: customer_acquisition_country_code
+        data_type: VARCHAR
+        synonyms:
+          - country code
+          - acquisition country
+
+      - name: customer_acquisition_channel_name
+        description: >-
+          Marketing channel through which the customer was acquired. Derived from
+          ecomm_mart.bill_line_traffic_ext.channel_grouping_name (records from 2022-08 onward)
+          or legacy S3 ads_bill_line_ext.ga_channel_grouping_name (pre-2022-08), joined on
+          bill_id = new_acquisition_bill_id AND new_acquisition_bill_mst_date = bill_modified_mst_date.
+          Materialized directly from ecomm_mart.bill_line_traffic_ext. See custom_instructions
+          for legacy source note.
+        expr: customer_acquisition_channel_name
+        data_type: VARCHAR
+        synonyms:
+          - acquisition channel
+          - marketing channel
+          - channel
+
+      - name: customer_acquisition_country_name
+        description: >-
+          Full country name where the customer was acquired. Derived from
+          finance360.dim_country_vw.country_name, joined on
+          enterprise.dim_new_acquisition_shopper.bill_country_code = dim_country_vw.country_code
+          AND dim_country_vw.current_record_flag = true. Materialized directly from
+          finance360.dim_country_vw.
+        expr: customer_acquisition_country_name
+        data_type: VARCHAR
+        synonyms:
+          - country name
+          - acquisition country name
+
+      - name: customer_region_1_name
+        description: >-
+          Level-1 geographic reporting region for the customer's acquisition country. Derived from
+          finance360.dim_country_vw.report_region_1_name, joined on acquisition country code with
+          current_record_flag = true. Materialized directly from finance360.dim_country_vw.
+        expr: customer_region_1_name
+        data_type: VARCHAR
+        synonyms:
+          - region 1
+          - reporting region 1
+
+      - name: customer_region_2_name
+        description: >-
+          Level-2 geographic reporting region for the customer's acquisition country. Derived from
+          finance360.dim_country_vw.report_region_2_name, joined on acquisition country code with
+          current_record_flag = true. Materialized directly from finance360.dim_country_vw.
+        expr: customer_region_2_name
+        data_type: VARCHAR
+        synonyms:
+          - region 2
+          - reporting region 2
+
+      - name: customer_region_3_name
+        description: >-
+          Level-3 geographic reporting region for the customer's acquisition country. Derived from
+          finance360.dim_country_vw.report_region_3_name, joined on acquisition country code with
+          current_record_flag = true. Materialized directly from finance360.dim_country_vw.
+        expr: customer_region_3_name
+        data_type: VARCHAR
+        synonyms:
+          - region 3
+          - reporting region 3
+
+      - name: customer_domestic_international_name
+        description: >-
+          Geographic classification of the customer as 'Domestic' or 'International' based on
+          acquisition country. Derived from finance360.dim_country_vw.domestic_international_ind,
+          joined on acquisition country code with current_record_flag = true. Materialized
+          directly from finance360.dim_country_vw.
+        expr: customer_domestic_international_name
+        data_type: VARCHAR
+        synonyms:
+          - domestic international
+          - dom int
+
+      - name: reseller_type_id
+        description: >-
+          Numeric identifier for the reseller/private label organization associated with this
+          customer at evaluation date. Derived from dp_enterprise.dim_reseller.reseller_type_id
+          via chain: customer360.dim_customer_history_vw.private_label_id →
+          dp_enterprise.dim_reseller.private_label_id. NULL private_label_id defaults to
+          reseller_type_id = 1 (GoDaddy direct). Materialized directly from
+          dp_enterprise.dim_reseller; customer360.dim_customer_history_vw used only as a
+          private_label_id lookup — no dim_customer_history_vw columns land directly on the fact.
+        expr: reseller_type_id
+        data_type: NUMBER
+        synonyms:
+          - reseller id
+          - private label id
+
+      - name: reseller_type_name
+        description: >-
+          Name of the reseller/private label organization associated with this customer at
+          evaluation date. Derived from dp_enterprise.dim_reseller.reseller_type_name via the
+          private_label_id chain (same as reseller_type_id). Materialized directly from
+          dp_enterprise.dim_reseller; customer360.dim_customer_history_vw used only as a
+          lookup intermediary.
+        expr: reseller_type_name
+        data_type: VARCHAR
+        synonyms:
+          - reseller name
+          - reseller
+
+      - name: customer_type_name
+        description: >-
+          Customer classification type at evaluation date (e.g., 'Pro', 'Care', '123 Reg',
+          'Not Evaluated'). Derived from analytic_feature.customer_type_history.customer_type_name,
+          filtered to records active on partition_eval_mst_date; overridden to '123 Reg' if
+          customer360.dim_customer_history_vw.private_label_id = 587240. Materialized directly
+          from analytic_feature.customer_type_history with override applied in ETL.
+        expr: customer_type_name
+        data_type: VARCHAR
+        synonyms:
+          - customer type
+          - customer segment
+
+      - name: customer_type_reason_desc
+        description: >-
+          Reason description for the customer type classification at evaluation date. Derived from
+          analytic_feature.customer_type_history.customer_type_reason_desc, filtered to records
+          active on partition_eval_mst_date; overridden to '123 Reg' for 123 Reg shoppers
+          (private_label_id = 587240). Materialized directly from
+          analytic_feature.customer_type_history.
+        expr: customer_type_reason_desc
+        data_type: VARCHAR
+        synonyms:
+          - customer type reason
+          - type reason
+
+      - name: customer_fraud_flag
+        description: >-
+          Boolean flag: TRUE if the customer was flagged as fraudulent at acquisition time.
+          Derived from analytic_feature.shopper_acquisition.acq_fraud_flag. Reflects fraud status
+          at acquisition, not necessarily current state — use customer_fraud_mst_date for the date
+          the fraud event was recorded. Materialized directly from
+          analytic_feature.shopper_acquisition.
+        expr: customer_fraud_flag
+        data_type: BOOLEAN
+        synonyms:
+          - fraud flag
+          - is fraud
+
+      - name: active_paid_subscription_list
+        description: >-
+          Array of active paid subscription IDs as of evaluation date. Derived from
+          enterprise.dim_subscription_history.subscription_id via intermediate driver
+          customer_core_conformed.customer_active_subscription_detail_driver (filtered:
+          finance_payable_resource_flag = true; collected via COLLECT_SET then SORT_ARRAY).
+          ARRAY FIELD — requires LATERAL FLATTEN for row-level analysis; do not aggregate directly.
+          Derived from enterprise.dim_subscription_history via
+          customer_core_conformed.customer_active_subscription_detail_driver; not directly
+          joinable.
+        expr: active_paid_subscription_list
+        data_type: ARRAY
+        synonyms:
+          - subscription list
+          - subscriptions
+
+      - name: product_pnl_category_list
+        description: >-
+          Array of distinct Finance PnL product categories owned by the customer at evaluation
+          date. Derived from
+          customer_core_conformed.customer_active_subscription_detail_driver.product_pnl_category
+          (COLLECT_SET). ARRAY FIELD — requires LATERAL FLATTEN for row-level analysis; do not
+          aggregate directly. Derived from enterprise.dim_subscription_history via
+          customer_core_conformed.customer_active_subscription_detail_driver; not directly
+          joinable.
+        expr: product_pnl_category_list
+        data_type: ARRAY
+        synonyms:
+          - pnl category list
+          - product categories
+
+      - name: product_pnl_line_list
+        description: >-
+          Array of Finance PnL product line names owned by the customer at evaluation date.
+          Derived from
+          customer_core_conformed.customer_active_subscription_detail_driver.product_pnl_line
+          (COLLECT_SET). ARRAY FIELD — requires LATERAL FLATTEN for row-level analysis; do not
+          aggregate directly. Derived from enterprise.dim_subscription_history via
+          customer_core_conformed.customer_active_subscription_detail_driver; not directly
+          joinable.
+        expr: product_pnl_line_list
+        data_type: ARRAY
+        synonyms:
+          - pnl line list
+          - product lines
+
+      - name: ttm_all_bill_list
+        description: >-
+          Array of all bill IDs from the trailing twelve months for the customer. Derived from
+          customer_core_conformed.customer_ttm_payment_driver.last_net_positive_bill_id (filtered:
+          net_positive_ttm_payment_flag = true AND trxn_currency_code != 'N/A'). Intraday
+          customers have an empty array. ARRAY FIELD — requires LATERAL FLATTEN for row-level
+          analysis; do not aggregate directly. Derived from enterprise.dim_subscription_history
+          via customer_core_conformed.customer_ttm_payment_driver; not directly joinable.
+        expr: ttm_all_bill_list
+        data_type: ARRAY
+        synonyms:
+          - ttm bill list
+          - trailing twelve month bills
+
+      - name: customer_state_enum
+        description: >-
+          INTERNAL AUDITING COLUMN ONLY — DO NOT USE FOR METRICS OR BUSINESS FILTERING.
+          Derived lifecycle state enum used exclusively for pipeline auditing: values include
+          'intraday', 'merged', 'churned', 'reactivated', 'new', 'active'. Per table owner
+          instructions, always use date columns to determine customer state — for example:
+          customer_acquisition_mst_date = partition_eval_mst_date for new customers;
+          customer_churn_mst_date IS NOT NULL for churned customers; active_status_flag = TRUE
+          for active customers. Computed via CASE logic in final ETL SQL. Preserved per
+          do-not-claim contract: must not be used for metric derivation.
+        expr: customer_state_enum
+        data_type: VARCHAR
+        synonyms: []
+
+      - name: active_status_flag
+        description: >-
+          Boolean flag: TRUE if customer is active at evaluation date (not churned and not
+          intraday). Computed as CASE WHEN customer_status NOT IN ('churned', 'intraday')
+          THEN TRUE ELSE FALSE END from customer_core_conformed.active_customer_stg.customer_status
+          via ETL CASE logic. Use as the primary filter for active customer analyses.
+        expr: active_status_flag
+        data_type: BOOLEAN
+        synonyms:
+          - is active
+          - active flag
+          - currently active
+
+
+    time_dimensions:
+      - name: customer_acquisition_mst_date
+        description: >-
+          Date of the customer's first net-positive payment bill (MST). Multi-case COALESCE
+          logic applied in ETL: (1) for new/intraday customers: if
+          enterprise.dim_new_acquisition_shopper.new_acquisition_bill_mst_date is not a future
+          date, COALESCE with enterprise.dim_subscription_history.subscription_create_mst_date,
+          defaulting to partition_eval_mst_date; (2) for existing customers: COALESCE of both
+          dates if earliest is not in the past, else NULL. Derived from
+          enterprise.dim_new_acquisition_shopper.new_acquisition_bill_mst_date (primary) with
+          fallback to enterprise.dim_subscription_history.subscription_create_mst_date.
+          Use this column (NOT customer_state_enum) to identify new customers:
+          customer_acquisition_mst_date = partition_eval_mst_date.
+        expr: customer_acquisition_mst_date
+        data_type: DATE
+        synonyms:
+          - acquisition date
+          - first purchase date
+          - customer start date
+
+      - name: customer_churn_mst_date
+        description: >-
+          Date when the customer most recently churned (MST). Set to partition_eval_mst_date when
+          customer_status = 'churned' AND analytic_feature.shopper_merge.shopper_merge_start_mst_date
+          IS NULL (i.e., churn is not due to account merge). NULL for non-churned customers and
+          for customers who churned via account merge. Derived from
+          customer_core_conformed.active_customer_stg.customer_status and
+          analytic_feature.shopper_merge.shopper_merge_start_mst_date via CASE logic.
+          Use this column (NOT customer_state_enum) to identify churned customers:
+          customer_churn_mst_date = partition_eval_mst_date for day-of-churn.
+        expr: customer_churn_mst_date
+        data_type: DATE
+        synonyms:
+          - churn date
+          - churned date
+
+      - name: customer_reactivate_mst_date
+        description: >-
+          Date when the customer most recently reactivated (returned after lapsing) (MST). Set to
+          partition_eval_mst_date when customer_status = 'new' AND
+          customer_acquisition_mst_date < partition_eval_mst_date (returning lapsed customer).
+          NULL for customers who have never reactivated. Derived via CASE logic from
+          customer_core_conformed.active_customer_stg.customer_status and
+          enterprise.dim_new_acquisition_shopper acquisition date logic.
+          Use this column (NOT customer_state_enum) to identify reactivated customers.
+        expr: customer_reactivate_mst_date
+        data_type: DATE
+        synonyms:
+          - reactivation date
+          - reactivated date
+
+      - name: customer_merge_mst_date
+        description: >-
+          Date when the customer account was merged into another account (MST). Derived from
+          analytic_feature.shopper_merge.shopper_merge_start_mst_date, populated only when
+          customer_status = 'churned' AND merge date is present. NULL for non-merged customers.
+          Materialized directly from analytic_feature.shopper_merge.shopper_merge_start_mst_date.
+          Use this column to identify merged customers.
+        expr: customer_merge_mst_date
+        data_type: DATE
+        synonyms:
+          - merge date
+          - merged date
+
+      - name: customer_fraud_mst_date
+        description: >-
+          Date when a fraud flag was recorded for the customer (MST). Derived from
+          analytic_feature.customer_fraud.fraud_flag_mst_date, populated only when:
+          analytic_feature.customer_fraud.customer_id IS NOT NULL AND
+          (shopper_reinstatement_flag = false OR
+          TO_DATE(shopper_reinstatement_mst_ts) > partition_eval_mst_date) AND
+          acq_fraud_flag = true. Materialized directly from
+          analytic_feature.customer_fraud.fraud_flag_mst_date.
+        expr: customer_fraud_mst_date
+        data_type: DATE
+        synonyms:
+          - fraud date
+          - fraud flag date
+
+      - name: partition_eval_mst_date
+        description: >-
+          Partition key: the evaluation date (MST) for which all facts and lifecycle state values
+          in the row are calculated, stored as a YYYY-MM-DD string. Required partition filter —
+          all queries MUST include a WHERE clause on partition_eval_mst_date for query
+          performance; failure to filter will scan all historical partitions. Composite primary
+          key component. Sourced directly from DAG parameter eval_mst_date passed at runtime.
+        expr: partition_eval_mst_date
+        data_type: VARCHAR
+        synonyms:
+          - evaluation date
+          - eval date
+          - snapshot date
+          - as of date
+
+      - name: etl_build_mst_ts
+        description: >-
+          ETL pipeline build timestamp (MST) recording when this row was produced. Computed as
+          FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP(), 'MST') at job execution time. SYSTEM AUDIT
+          COLUMN — not a business timestamp; use only for data freshness monitoring. Per
+          do-not-claim contract: do not use as a business time dimension for analysis or
+          reporting.
+        expr: etl_build_mst_ts
+        data_type: TIMESTAMP_NTZ
+        synonyms:
+          - etl timestamp
+          - load timestamp
+
+    facts:
+      - name: customer_tenure_year_count
+        description: >-
+          Customer tenure in whole years as of the evaluation date. Computed as
+          CAST(DATEDIFF(partition_eval_mst_date, customer_acquisition_mst_date) / 365 AS INT).
+          NULL when customer_acquisition_mst_date is NULL. Derived from the acquisition date
+          resolved via enterprise.dim_new_acquisition_shopper.new_acquisition_bill_mst_date and
+          enterprise.dim_subscription_history.subscription_create_mst_date CASE logic.
+        expr: customer_tenure_year_count
+        data_type: NUMBER
+        synonyms:
+          - tenure years
+          - customer age years
+          - years as customer
+
+      - name: product_pnl_category_qty
+        description: >-
+          Count of distinct Finance PnL product categories owned by the customer at evaluation
+          date. Pre-computed at ETL time as COUNT(DISTINCT product_pnl_category) from
+          customer_core_conformed.customer_active_subscription_detail_driver. Churned customers
+          carry the previous day's values. Derived from enterprise.dim_subscription_history via
+          customer_core_conformed.customer_active_subscription_detail_driver; not directly
+          joinable.
+        expr: product_pnl_category_qty
+        data_type: NUMBER
+        synonyms:
+          - product category count
+          - pnl category count
+          - number of product categories
+
+      - name: ttm_gcr_usd_amt
+        description: >-
+          Trailing twelve months (TTM) gross cash received in USD for this customer as of
+          evaluation date. Pre-aggregated per shopper at ETL time as SUM(ttm_total_gcr_usd_amt)
+          from customer_core_conformed.customer_ttm_payment_driver (filtered:
+          net_positive_ttm_payment_flag = true AND trxn_currency_code != 'N/A', date range
+          eval_date minus 365 days to eval_date). COALESCE to 0 if null. Churned customers use
+          T-1 values. Note: already pre-aggregated per shopper per partition_eval_mst_date — do
+          not double-aggregate without explicit GROUP BY partition_eval_mst_date. Derived from
+          enterprise.dim_subscription_history via customer_core_conformed.customer_ttm_payment_driver;
+          not directly joinable.
+        expr: ttm_gcr_usd_amt
+        data_type: NUMBER
+        synonyms:
+          - ttm gcr
+          - trailing twelve month revenue
+          - ttm revenue usd
+
+    metrics:
+      - name: total_active_customers
+        description: >-
+          Total number of active customers at the evaluation date. Counts shoppers where
+          active_status_flag = TRUE (not churned, not intraday). Always filter by
+          partition_eval_mst_date for point-in-time analysis.
+        expr: COUNT(CASE WHEN active_status_flag = TRUE THEN 1 END)
+        synonyms:
+          - active customers
+          - active customer count
+
+      - name: new_customers
+        description: >-
+          Number of newly acquired customers on the evaluation date. Counted where
+          customer_acquisition_mst_date = partition_eval_mst_date. Per table owner instructions:
+          always use customer_acquisition_mst_date (NOT customer_state_enum) to identify new
+          customers.
+        expr: COUNT(CASE WHEN customer_acquisition_mst_date = partition_eval_mst_date THEN 1 END)
+        synonyms:
+          - new customer count
+          - acquisitions
+
+      - name: churned_customers
+        description: >-
+          Number of customers who churned on the evaluation date. Counted where
+          customer_churn_mst_date = partition_eval_mst_date. Per table owner instructions:
+          always use customer_churn_mst_date (NOT customer_state_enum) to identify churned
+          customers.
+        expr: COUNT(CASE WHEN customer_churn_mst_date = partition_eval_mst_date THEN 1 END)
+        synonyms:
+          - churn count
+          - churned customer count
+
+      - name: reactivated_customers
+        description: >-
+          Number of customers who reactivated (returned after lapsing) on the evaluation date.
+          Counted where customer_reactivate_mst_date = partition_eval_mst_date. Per table owner
+          instructions: always use customer_reactivate_mst_date (NOT customer_state_enum) to
+          identify reactivated customers.
+        expr: COUNT(CASE WHEN customer_reactivate_mst_date = partition_eval_mst_date THEN 1 END)
+        synonyms:
+          - reactivation count
+          - reactivated customer count
+
+      - name: two_plus_product_customers
+        description: >-
+          Number of active customers with two or more distinct Finance PnL product categories
+          (multi-product customers). Counted where product_pnl_category_qty >= 2 AND
+          active_status_flag = TRUE. Replaces legacy customer_mart.two_plus_active_customer
+          metric per Confluence documentation.
+        expr: COUNT(CASE WHEN product_pnl_category_qty >= 2 AND active_status_flag = TRUE THEN 1 END)
+        synonyms:
+          - two plus customers
+          - multi product customers
+          - 2+ customers
+
+      - name: total_ttm_gcr_usd
+        description: >-
+          Total trailing twelve-month gross cash received (USD) summed across all customers at
+          the evaluation date. Aggregates the pre-computed per-shopper ttm_gcr_usd_amt column.
+          Always filter by partition_eval_mst_date for point-in-time totals.
+        expr: SUM(ttm_gcr_usd_amt)
+        synonyms:
+          - total ttm revenue
+          - total trailing twelve month gcr
+
+      - name: avg_ttm_gcr_usd_per_active_customer
+        description: >-
+          Average TTM gross cash received (USD) per paying active customer. Computed as the
+          average of ttm_gcr_usd_amt where active_status_flag = TRUE and ttm_gcr_usd_amt > 0,
+          excluding zero-revenue active customers from the denominator.
+        expr: AVG(CASE WHEN active_status_flag = TRUE AND ttm_gcr_usd_amt > 0 THEN ttm_gcr_usd_amt END)
+        synonyms:
+          - avg ttm gcr per customer
+          - average revenue per active customer
+
+      - name: merged_customers
+        description: >-
+          Number of customers whose accounts have been merged as of the evaluation date. Counted
+          where customer_merge_mst_date IS NOT NULL. Sourced from
+          analytic_feature.shopper_merge.shopper_merge_start_mst_date via ETL CASE logic.
+        expr: COUNT(CASE WHEN customer_merge_mst_date IS NOT NULL THEN 1 END)
+        synonyms:
+          - merged customer count
+          - account merges
+
+
+verified_queries:
+  - name: active_customers_by_date
+    question: "How many active customers are there on a given date?"
+    sql: |
+      SELECT
+        partition_eval_mst_date,
+        COUNT(*) AS active_customer_count
+      FROM MARKETING_CORE_DEV.CONFORMED.customer_life_cycle_vw
+      WHERE partition_eval_mst_date = '<date>'
+        AND active_status_flag = TRUE
+      GROUP BY partition_eval_mst_date
+    use_as_onboarding_question: true
+
+  - name: new_customers_by_date
+    question: "How many new customers were acquired on a given date?"
+    sql: |
+      SELECT
+        partition_eval_mst_date,
+        COUNT(*) AS new_customer_count
+      FROM MARKETING_CORE_DEV.CONFORMED.customer_life_cycle_vw
+      WHERE partition_eval_mst_date = '<date>'
+        AND customer_acquisition_mst_date = partition_eval_mst_date
+      GROUP BY partition_eval_mst_date
+    use_as_onboarding_question: true
+
+  - name: customers_by_acquisition_country
+    question: "How many active customers do we have by acquisition country?"
+    sql: |
+      SELECT
+        customer_acquisition_country_code,
+        customer_acquisition_country_name,
+        COUNT(*) AS customer_count
+      FROM MARKETING_CORE_DEV.CONFORMED.customer_life_cycle_vw
+      WHERE partition_eval_mst_date = '<date>'
+        AND active_status_flag = TRUE
+      GROUP BY
+        customer_acquisition_country_code,
+        customer_acquisition_country_name
+      ORDER BY customer_count DESC
+    use_as_onboarding_question: true
+
+custom_instructions: |
+  GRAIN: One row per (customer_id, partition_eval_mst_date).
+
+  REQUIRED PARTITION FILTER: Every query MUST include a WHERE clause filtering on
+  partition_eval_mst_date. Failure to do so will scan all historical partitions and
+  cause severe query performance degradation.
+
+  PRIMARY KEY CAVEATS: The composite primary key is (customer_id, partition_eval_mst_date).
+  customer_id may be NULL for some shoppers and is NOT a unique key despite the lake DDL
+  @PrimaryKey annotation — DQ checks confirm the actual PK is (customer_id, partition_eval_mst_date).
+
+  CUSTOMER STATE IDENTIFICATION — use date columns only, NOT customer_state_enum:
+    New customers:         customer_acquisition_mst_date = partition_eval_mst_date
+    Active customers:      active_status_flag = TRUE
+    Churned customers:     customer_churn_mst_date IS NOT NULL
+                           (or = partition_eval_mst_date for day-of-churn)
+    Reactivated customers: customer_reactivate_mst_date = partition_eval_mst_date
+    Merged customers:      customer_merge_mst_date IS NOT NULL
+
+  DO NOT CLAIM — customer_state_enum: This column is an INTERNAL AUDITING COLUMN and must
+  NOT be used for metric derivation, business filtering, or customer state determination.
+  Per table owner instructions, always use the date columns listed above instead of
+  customer_state_enum.
+
+  ARRAY FIELD WARNINGS — the following five columns are ARRAY types and require LATERAL
+  FLATTEN or equivalent for row-level analysis; do NOT aggregate them directly and do NOT
+  define metrics that unnest or aggregate these fields without FLATTEN:
+    - active_paid_subscription_list  (array of paid subscription IDs)
+    - product_pnl_category_list      (array of Finance PnL product categories)
+    - product_pnl_line_list          (array of Finance PnL product lines)
+    - ttm_all_bill_list              (array of TTM bill IDs)
+
+  TTM GCR NOTE: ttm_gcr_usd_amt is pre-aggregated per shopper per partition_eval_mst_date
+  (SUM over trailing 12-month payment window in ETL). Do not double-aggregate this column
+  without an explicit GROUP BY partition_eval_mst_date.
+
+  SYSTEM AUDIT COLUMNS (not for business analysis):
+    - etl_build_mst_ts: system pipeline timestamp; use only for freshness monitoring
+    - customer_state_enum: internal auditing enum (see DO NOT CLAIM above)
+
+  LEGACY ACQUISITION CHANNEL NOTE: customer_acquisition_channel_name for customers acquired
+  before 2022-08 is sourced from legacy S3 path
+  s3://gd-ckpetlbatch-prod-analytic/analytic/ads_bill_line_ext/ (field: ga_channel_grouping_name)
+  rather than ecomm_mart.bill_line_traffic_ext. Channel values may differ slightly across
+  this boundary.

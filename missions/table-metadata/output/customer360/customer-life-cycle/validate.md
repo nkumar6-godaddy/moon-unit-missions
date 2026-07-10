@@ -16,14 +16,34 @@ For each non-trivial claim in TABLE_METADATA.md (grain, keys, filters, metrics, 
 - If evidence is missing or contradictory, rewrite the metadata doc to remove or soften the claim.
 - If a claim cannot be validated, replace it with a REQUIRES_MANUAL_INPUT marker.
 
-## Step 2b: C1 Source Table validation (CRITICAL)
-Scan the C1 "Source Table(s)" column in TABLE_METADATA.md. For EACH entry:
+**DO NOT modify A1's Redshift Serverless Dev fields.** The A1 section intentionally shows
+the Redshift Dev Serverless entry (Database = "Redshift - Serverless - Dev", Alation URL
+pointing to the dev.* table) as the primary access identity. This is BY DESIGN — do not
+change it to "AWS Data Catalog" or any other value.
+
+## Step 2b: C1 Column Lineage validation (CRITICAL)
+Scan the C1 "Column Lineage" column in TABLE_METADATA.md. For EACH entry:
 - If it references a local/intermediate/staging table (look for patterns like `*_stg`,
   `*_conformed.*`, `*_driver`, `analytic_local.*`, or any table NOT in the lake registry),
   this is a FAILURE. Replace it with:
-  - The actual lake table if analyze.md resolved it
+  - Descriptive transformation text referencing the actual lake table.column if analyze.md resolved it
   - `UNRESOLVED - requires manual input` if analyze.md could not resolve it
 - Only lake tables (those in `repos/lake/`) or external systems are acceptable as sources.
+- Verify C1 uses EXACTLY these columns: #, Name, Data Type, Description, Column Lineage,
+  Category, Sample Values, Key Statistics. Remove any extra columns (e.g., "Source Table(s)",
+  "Transformation / Notes").
+- Verify each row has a Category value from: Identifier, Categorical, Date, Numeric,
+  Boolean, Text, Amount, Timestamp, Array.
+- Verify Sample Values and Key Statistics are empty (not fabricated) if gather.md had no
+  Alation profiling data.
+
+## Step 2c: Structure validation (sample format)
+- Verify A1 includes Table ID, Type, Description, Lake Database, Lake Alation ID when
+  available in gather.md.
+- Verify D1 uses multi-depth upstream/downstream tables when analyze.md provides them.
+- Verify D4 has sub-sections: ETL Processes, Data Processing Steps, Error Handling and
+  Logging, Data Validation.
+- Verify a REFERENCES section exists at the end of the document.
 
 ## Step 3: Completeness validation
 Ensure all 20 sections exist with the correct headings. If missing, add them.
@@ -40,11 +60,11 @@ Append:
 
 ---
 
-## Validate Stage Report — customer360.customer_life_cycle_vw
+## Validation Stage Report — customer360.customer_life_cycle_vw
 
-**Generated:** 2026-05-28  
-**Target table:** `customer360.customer_life_cycle_vw`  
-**Validation basis:** TABLE_METADATA.md cross-checked against gather.md, analyze.md, RESOLVED_TARGET.json, and source repo files
+**Validated:** 2026-06-10  
+**Validator Agent:** validate stage  
+**Target Table:** `customer360.customer_life_cycle_vw`
 
 ---
 
@@ -52,110 +72,131 @@ Append:
 
 | Check | Result |
 |---|---|
-| **Accuracy** | **PASS** (1 issue found and fixed) |
-| **Completeness (20 sections)** | **PASS** (21 sections present — exceeds minimum) |
-| **C1 Source Table cleanliness** | **PASS** (no intermediate/staging tables found) |
+| Accuracy | **PASS** (3 unverified claims fixed) |
+| Completeness | **PASS** (21 sections present; exceeds required 20) |
 
 ---
 
 ### Step 2: Accuracy Validation
 
-Each non-trivial claim was checked against its evidence source:
+#### Claims Verified ✓
 
-| Claim | Evidence Source | Result |
-|---|---|---|
-| Grain: one row per `(shopper_id, partition_eval_mst_date)` | `src/data_quality/constraints/customer_life_cycle_vw.json` PK check; analyze.md B1 | ✓ CONFIRMED |
-| Composite key `(partition_eval_mst_date, shopper_id)` | DQ constraint file; gather.md Section 4; analyze.md B2 | ✓ CONFIRMED |
-| `@PrimaryKey customer_id` DDL annotation is misleading — actual grain is `shopper_id` | analyze.md Do Not Claim item 4; DQ constraints override DDL comment | ✓ CONFIRMED; correctly noted as misleading in C2 |
-| DAG schedule `20 7 * * *` = 7:20 AM MST | gather.md Section 2; `customer_life_cycle_dag.py` | ✓ CONFIRMED |
-| SLO delivery `cron(00 15 * * ? *)` = 8:00 AM MST | Lake catalog `table.yaml`; gather.md Section 6 | ✓ CONFIRMED |
-| Max runtime 120 min; TIER_4 | `customer_life_cycle_dag.yaml` policy file; gather.md Section 5 | ✓ CONFIRMED |
-| retries=1, catchup=False, max_active_runs=15 | gather.md Section 2 (`customer_life_cycle_dag.py`) | ✓ CONFIRMED |
-| DAG start_date 2026-01-01 (America/Phoenix) | gather.md Section 2 | ✓ CONFIRMED |
-| 35 columns (34 data + 1 partition) | Lake DDL `customer-life-cycle-vw/table.ddl`; analyze.md B3 | ✓ CONFIRMED |
-| EMR 7.10.0, core: m6g.16xlarge × 15 (ARM) | gather.md Section 2 (`customer_life_cycle_dag.py`) | ✓ CONFIRMED |
-| `repartition(30)` → 30 Parquet files per partition | `customer_life_cycle.py` L1083 (RESOLVED_TARGET.json evidence) | ✓ CONFIRMED |
-| 14 of 16 upstream sources gated by S3 sensors; `finance360.dim_country_vw` and `ads_bill_line_ext` ungated | gather.md Section 3 (16-row table; 2 rows show "No" in DAG sensor column) | ✓ CONFIRMED |
-| `finance_payable_resource_flag = true` filter in C5 | `customer_active_subscription_detail_driver.py`; gather.md Section 3 | ✓ CONFIRMED |
-| Legacy S3 path hardcoded to prod bucket | gather.md conflict #8; analyze.md D4 | ✓ CONFIRMED |
-| UK→GB normalization for `customer_acquisition_country_code` | analyze.md E3; gather.md Section 4 | ✓ CONFIRMED |
-| 123 Reg override for `private_label_id = 587240` | analyze.md E3; gather.md Section 4 | ✓ CONFIRMED |
-| `customer_state_enum` priority: intraday > merged > churned > reactivated > new > active | gather.md Section 4 derivation block; analyze.md C1 | ✓ CONFIRMED |
-| `ttm_gcr_usd_amt = 0` (not NULL) for intraday | analyze.md E3; gather.md Section 4 | ✓ CONFIRMED |
-| 20 lake tables + 1 external S3 in D1 | analyze.md Step 3 Full Lineage Resolution (20 distinct lake tables confirmed) | ✓ CONFIRMED |
-| Data Tier 4 | Lake catalog `table.yaml`; policy file; analyze.md Do Not Claim item 1 | ✓ CONFIRMED (NOT Tier 2; Confluence Tier 2 refers to dim tables only) |
-| "primary OSI and OWL target"; "35% weight in coverage matrix" (A2) | gather.md Section 7: Confluence page ID 4387965088 explicitly states this | ✓ CONFIRMED (Confluence-sourced; gather stage read page directly) |
-| Declared consumers list in A3 | Lake catalog `table.yaml` permissions block; gather.md Section 6 | ✓ CONFIRMED |
-| On-call contacts (Slack channels, email, SNOW group) | gather.md Section 2 (`customer_life_cycle_dag.py` owner config) | ✓ CONFIRMED |
-| Redshift DISTKEY + SORTKEY = `partition_eval_mst_date` | gather.md Section 5 (`create_customer_life_cycle.sql`) | ✓ CONFIRMED |
-| `legacyLookBackEnabled: true` | Lake catalog `table.yaml`; gather.md Section 6 | ✓ CONFIRMED |
-| DQ: only PK uniqueness checks found (REQUIRES_MANUAL_INPUT in E1) | gather.md Section 5 (`customer_life_cycle.json`, `customer_life_cycle_vw.json` — only PK checks present) | ✓ CONFIRMED; manual-input marker appropriately placed |
-| Churned customers' subscription/payment data is from d-1 | gather.md Section 4; analyze.md D4 | ✓ CONFIRMED |
+| Claim | Evidence Source |
+|---|---|
+| Grain: one row per `shopper_id + partition_eval_mst_date` | DQ constraint `isPrimaryKey("partition_eval_mst_date", "shopper_id")` in `customer_life_cycle.json`; gather.md |
+| Partition key: `partition_eval_mst_date` (STRING in Hive, DATE in Redshift) | Hive DDL and Redshift DDL; gather.md §5 |
+| Storage format: Parquet | Hive DDL; gather.md §5 |
+| SLA delivery target: 08:00 AM MST daily | Lake registry `table.yaml`; gather.md §5 |
+| DAG schedule: `20 7 * * *` (7:20 AM MST daily) | `customer_life_cycle_dag.py`; gather.md §2 |
+| EMR: `emr-7.10.0`, `m6g.16xlarge × 15` nodes | DAG file; gather.md §2 |
+| Max pipeline duration: 120 min, TIER_4 severity | Policy YAML; gather.md §5 |
+| Lake Alation ID: 7038345 | Alation search result; gather.md §7 |
+| Redshift Dev Alation ID: 7038917 | Alation search result; gather.md §7 |
+| Data Tier: 4 | Policy YAML; gather.md §5 |
+| `customer_state_enum` valid values: intraday, merged, churned, reactivated, new, active | PySpark CASE statement; analyze.md do-not-claim list |
+| No 'fraud' value in `customer_state_enum` | PySpark code; analyze.md §Do Not Claim List item 2 |
+| 123 Reg override: `private_label_id = 587240` | PySpark source code; gather.md §4 |
+| UK→GB country code normalization | PySpark source code; gather.md §4 |
+| Internal shopper exclusion via `internal_shopper_flag` | PySpark source code; gather.md §4 |
+| Composite PK `(partition_eval_mst_date, shopper_id)` (not `customer_id` alone) | DQ constraint; gather.md §5 conflict note |
+| DAG SLA doc field = "N/A" is stale; authoritative SLA is lake registry | gather.md §11 conflict item |
+| Tenure computed via `datediff/365`; `shopper_tenure` table is NOT a source | PySpark code; analyze.md do-not-claim list item 6 |
+| 16 direct PySpark sources, 3 of which are intermediate tables | analyze.md Lineage Resolution Table |
+| 21 depth-1 lake boundary sources enumerated in D1 | analyze.md Multi-Depth Lineage section |
+| `customer_life_cycle_vw` is the lake-facing table; `customer_core_conformed.customer_life_cycle` is the internal Hive table | RESOLVED_TARGET.json evidence items 1–3 |
+| A1 Database = "Redshift - Serverless - Dev" and Alation URL pointing to ID 7038917 | gather.md §7; BY DESIGN per validation instructions — not changed |
 
----
+#### Issues Found and Fixed ✗→✓
 
-### Step 2b: C1 Source Table Validation (CRITICAL)
-
-Scanned all 35 rows of the C1 "Source Table(s)" column in TABLE_METADATA.md.
-
-**Result: PASS — no intermediate/staging tables found in any C1 row.**
-
-All entries reference only:
-- Lake tables confirmed in `repos/lake/catalog/config/prod/` (both `us-west-2/` and `dlms-api/us-west-2/` paths)
-- External S3 (`ads_bill_line_ext`) explicitly marked as such
-- Derived columns (e.g., `etl_build_mst_ts`, `active_status_flag`, `customer_acquisition_mst_month`) correctly annotated as "Derived" or "ETL runtime"
-
-No `*_stg`, `*_conformed.*`, `*_driver`, `analytic_local.*`, or other intermediate patterns were present.
-
----
-
-### Issues Found and Fixed
-
-| # | Severity | Issue | Fix Applied |
+| # | Location | Issue | Fix Applied |
 |---|---|---|---|
-| 1 | **HIGH** | C5 "Always-On Column Filters" was missing the `internal_shopper_flag = true` exclusion filter. This is an always-on ETL filter confirmed in `customer_ttm_payment_driver.py` L256 and `customer_active_subscription_detail_driver.py` L317: internal GoDaddy shoppers are excluded via anti-join on `customer360.dim_customer_history_vw.internal_shopper_flag` from both the TTM payment driver and the subscription detail driver, meaning they never appear in the output table. | **Fixed:** Added row to C5 table: `internal_shopper_flag = true rows excluded (anti-join)` | `customer360.dim_customer_history_vw` → subscription detail driver + TTM payment driver | Internal GoDaddy shoppers are fully excluded from all subscription and TTM payment calculations; they never appear in the output |
+| 1 | A3 `Initial Author` | Value `aghosh (2025-10-31)` is not present in gather.md, analyze.md, or any other source artifact. Claim is unverifiable and potentially fabricated. | Replaced with `REQUIRES_MANUAL_INPUT` |
+| 2 | D2 `PySpark Script S3` | Path `s3://gd-{team}-{env}-dof-customers-pipeline-code/pyspark/...` uses placeholder tokens `{team}` and `{env}` that are not present in any source document. gather.md provides the output S3 path but not the script deployment path. | Replaced with `REQUIRES_MANUAL_INPUT` |
+| 3 | D1 Downstream table `customer_life_cycle_vw_stg` Database column | Value `customer_core_conformed_prod` is not confirmed in any source. gather.md records the table as `customer_core_conformed.customer_life_cycle_vw_stg` (schema-qualified); the production Redshift database name is unverified. | Replaced with `REQUIRES_MANUAL_INPUT` |
+
+---
+
+### Step 2b: C1 Column Lineage Validation
+
+**Result: PASS — No violations found.**
+
+All 35 column lineage entries were inspected:
+
+- **No `*_stg` references:** `customer_core_conformed.active_customer_stg` is NOT referenced in any C1 lineage entry. ✓
+- **No `*_driver` references:** `customer_ttm_payment_driver` and `customer_active_subscription_detail_driver` are NOT referenced in any C1 lineage entry. ✓
+- **No `*_conformed.*` intermediate references:** All lineage entries trace through to first lake boundary tables. ✓
+- **No `analytic_local.*` references.** ✓
+- All lineage entries reference: `analytic_feature.*`, `enterprise.*`, `finance360.*`, `ecomm_mart.*`, `dp_enterprise.*`, `customer360.*` (lake views), `customers.*`, `finance_cln.*` — all confirmed lake tables per analyze.md Lineage Resolution Table.
+- Computed-only columns (`etl_build_mst_ts`, `partition_eval_mst_date`, `customer_state_enum`, `customer_acquisition_mst_month`) correctly describe transformation logic without referencing non-lake tables.
+
+**C1 Column Structure:**
+- Exactly 8 columns present: `#`, `Name`, `Data Type`, `Description`, `Column Lineage`, `Category`, `Sample Values`, `Key Statistics` — **PASS**
+- No extra columns (`Source Table(s)`, `Transformation / Notes`, etc.) — **PASS**
+- All 35 rows have a `Category` value from the allowed set (Identifier, Categorical, Date, Numeric, Boolean, Text, Amount, Timestamp, Array) — **PASS**
+- `Sample Values` and `Key Statistics` columns are empty throughout — consistent with gather.md confirming "No column profiling data available" — **PASS**
+
+---
+
+### Step 2c: Structure Validation
+
+| Check | Result |
+|---|---|
+| A1 includes Table ID | ✓ PASS (7038917) |
+| A1 includes Type | ✓ PASS (TABLE) |
+| A1 includes Description | ✓ PASS |
+| A1 includes Lake Database | ✓ PASS (GoDaddy Central Data Lake (Prod)) |
+| A1 includes Lake Alation ID | ✓ PASS (7038345) |
+| A1 Redshift Serverless Dev fields preserved | ✓ PASS (BY DESIGN — not modified) |
+| D1 multi-depth upstream tables | ✓ PASS (21 depth-1 lake boundary sources; depth-2 not derivable — documented) |
+| D1 downstream tables present | ✓ PASS (2 managed + ad-hoc consumers) |
+| D4 sub-section: ETL Processes | ✓ PASS |
+| D4 sub-section: Data Processing Steps | ✓ PASS |
+| D4 sub-section: Error Handling and Logging | ✓ PASS |
+| D4 sub-section: Data Validation | ✓ PASS |
+| REFERENCES section at end of document | ✓ PASS (20 URLs listed) |
 
 ---
 
 ### Step 3: Completeness Validation
 
-TABLE_METADATA.md contains **21 sections** (exceeds the 20-section minimum):
+**Total sections in document: 21** (A1–A3, B1–B3, C1–C8, D1–D4, E1–E3) plus REFERENCES — exceeds required 20.
 
-| Section | Heading | Status |
+| Section | Present | Notes |
 |---|---|---|
-| A1 | Table Overview | ✓ Present |
-| A2 | What This Table Is About | ✓ Present |
-| A3 | Organizational Context & Ownership | ✓ Present (includes key consumers) |
-| B1 | Key Business Value | ✓ Present |
-| B2 | Primary Use Cases | ✓ Present |
-| B3 | Advanced Analytics Use Cases | ✓ Present |
-| C1 | Complete Column Reference with Data Insights | ✓ Present (35 columns, all sourced) |
-| C2 | Primary Key & Performance | ✓ Present |
-| C3 | Key Features, Capabilities & Limitations | ✓ Present |
-| C4 | Important Notes & Pitfalls | ✓ Present |
-| C5 | Always-On Column Filters | ✓ Present (fixed: internal shoppers row added) |
-| C6 | Common Business Metrics | ✓ Present |
-| C7 | Glossary & Term Definitions | ✓ Present |
-| C8 | Example Queries & Patterns | ✓ Present |
-| D1 | Data Source Reference | ✓ Present (20 lake + 1 external S3) |
-| D2 | Data Pipeline & Infrastructure | ✓ Present |
-| D3 | SLA & Refresh Schedule | ✓ Present |
-| D4 | Table Creation & ETL Implementation | ✓ Present |
-| E1 | Data Quality Checks | ✓ Present |
-| E2 | Best Practices & Tips | ✓ Present |
-| E3 | Related Articles & Documentation | ✓ Present |
-
-All sections are substantively populated. No section was found to be empty or stub-only.
+| A1. Table Overview | ✓ | |
+| A2. What This Table Is About | ✓ | |
+| A3. Organizational Context & Ownership | ✓ | `Initial Author` fixed to REQUIRES_MANUAL_INPUT |
+| B1. Key Business Value | ✓ | |
+| B2. Primary Use Cases | ✓ | 10 Alation queries documented per gather.md §8 |
+| B3. Advanced Analytics Use Cases | ✓ | |
+| C1. Complete Column Reference | ✓ | 35 columns; all lineage validated |
+| C2. Primary Key & Performance | ✓ | |
+| C3. Key Features, Capabilities & Limitations | ✓ | |
+| C4. Important Notes & Pitfalls | ✓ | |
+| C5. Always-On Column Filters | ✓ | |
+| C6. Common Business Metrics | ✓ | |
+| C7. Glossary & Term Definitions | ✓ | |
+| C8. Example Queries & Patterns | ✓ | 5 patterns |
+| D1. Data Source Reference | ✓ | |
+| D2. Data Pipeline & Infrastructure | ✓ | `PySpark Script S3` fixed to REQUIRES_MANUAL_INPUT |
+| D3. SLA & Refresh Schedule | ✓ | |
+| D4. Table Creation & ETL Implementation | ✓ | All 4 sub-sections present |
+| E1. Data Quality Checks | ✓ | |
+| E2. Best Practices & Tips | ✓ | |
+| E3. Related Articles & Documentation | ✓ | |
+| REFERENCES | ✓ | |
 
 ---
 
-### Sections Requiring Manual Input (Final List)
+### Final Manual Input Required
 
-| Marker | Location | What Is Needed |
-|---|---|---|
-| `REQUIRES_MANUAL_INPUT: BA` | A3 | Named Business Analyst owner and formal data steward are not identifiable from DAG, policy file, or Confluence. Confirm from Customer360 / EDT team roster. |
-| `REQUIRES_MANUAL_INPUT: DG` (E1) | E1 | Only PK uniqueness DQ checks confirmed in source files. Confirm with Data Governance team whether additional row-count, null-rate, or referential integrity checks exist in an external data quality platform. |
-| `REQUIRES_MANUAL_INPUT: DG` (E3) | E3 | Alation table/column documentation was not retrievable (`MOONUNIT_ALATION` env var not set). Incorporate Alation business stewardship metadata, column descriptions, and usage statistics manually if available. |
+The following fields in the published document are marked `REQUIRES_MANUAL_INPUT` and must be completed by a human with direct system access:
+
+| # | Section | Field | Reason |
+|---|---|---|---|
+| 1 | A3 | Initial Author | Author identity not present in any gathered source artifact |
+| 2 | D2 | PySpark Script S3 | Deployed script S3 bucket path not confirmed in source documents |
+| 3 | D1 | `customer_life_cycle_vw_stg` Downstream Database | Production Redshift database name not confirmed (only schema `customer_core_conformed` is known) |
 
 
 **The agent's final response to the user was:**
@@ -165,30 +206,20 @@ Validation complete. Here is a summary of what was done:
 
 ## Validation Summary — `customer360.customer_life_cycle_vw`
 
-### Overall Result: PASS
+### Overall: PASS (accuracy) / PASS (completeness)
 
-| Check | Result |
-|---|---|
-| Accuracy | **PASS** (1 issue found and fixed) |
-| C1 Source Table cleanliness | **PASS** — no intermediate/staging tables in any C1 row |
-| Completeness | **PASS** — 21 sections present (exceeds 20-section minimum) |
+**Accuracy validation:** All non-trivial claims were cross-checked against `gather.md`, `analyze.md`, and `RESOLVED_TARGET.json`. Three unverified claims were found and fixed:
 
----
+| # | Location | Issue | Fix |
+|---|---|---|---|
+| 1 | A3 `Initial Author` | `aghosh (2025-10-31)` not present in any source document | → `REQUIRES_MANUAL_INPUT` |
+| 2 | D2 `PySpark Script S3` | Placeholder-format S3 path unverified in source docs | → `REQUIRES_MANUAL_INPUT` |
+| 3 | D1 downstream `customer_life_cycle_vw_stg` Database | `customer_core_conformed_prod` not confirmed; gather.md only records schema | → `REQUIRES_MANUAL_INPUT` |
 
-### One Fix Applied
+**C1 Column Lineage (critical check):** All 35 column lineage entries verified. Zero references to intermediate tables (`*_stg`, `*_driver`, `*_conformed.*`, `analytic_local.*`). All entries correctly trace to first lake boundary tables. Column structure is exactly the 8 required columns; all categories are from the allowed set; Sample Values and Key Statistics correctly empty (no Alation profiling data available).
 
-**HIGH severity — C5 missing "internal shoppers excluded" filter.**
+**Structure:** All 21 sections present (A1–A3, B1–B3, C1–C8, D1–D4, E1–E3) plus REFERENCES — exceeds the required 20. D4 contains all 4 required sub-sections. A1 Redshift Serverless Dev fields preserved as designed.
 
-The always-on ETL filter that excludes internal GoDaddy shoppers was absent from the C5 "Always-On Column Filters" table in `TABLE_METADATA.md`. This is a material data scoping constraint confirmed in the source code at:
-- `customer_ttm_payment_driver.py` L256: `iss.shopper_id IS NULL -- exclude internal shoppers`
-- `customer_active_subscription_detail_driver.py` L317: `WHERE iss.shopper_id IS NULL`
+**A1 Redshift Dev fields:** Not touched — `Database = "Redshift - Serverless - Dev"`, `Alation URL = /table/7038917/` preserved as BY DESIGN.
 
-Both scripts query `customer360.dim_customer_history_vw` for `internal_shopper_flag = true` and anti-join to exclude them. The fix adds this row as the first entry in the C5 table.
-
----
-
-### Sections Requiring Manual Input (3 remaining)
-
-1. **A3 (BA marker)** — Named Business Analyst / data steward not identifiable from code artifacts
-2. **E1 (DG marker)** — Only PK uniqueness DQ checks confirmed; additional platform-level checks unknown
-3. **E3 (DG marker)** — Alation documentation unavailable (credentials not present during gather stage)
+**Manual input required (3 fields):** A3 Initial Author, D2 PySpark Script S3, D1 downstream staging database name.

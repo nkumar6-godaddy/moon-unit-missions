@@ -1,0 +1,23 @@
+# Configuration for OSI Semantic Model Generation Mission
+# Target: customer360.customer_metric_daily_agg_vw (Customer Metric Daily Aggregation)
+
+target:
+  pyspark_url: "https://github.com/gdcorp-dna/dof-dpaas-customer-feature/blob/main/customer360/customer-metrics/src/pyspark/customer_metric_daily_agg.py"
+  lake_table_override: null  # auto-detect from PySpark output
+  semantic_model_name: null  # auto-derive: customer360_customer_metric_daily_agg_analytics
+  snowflake_database: "MARKETING_CORE_DEV"
+
+
+sources:
+  confluence_pages:
+    - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/3779199819/Customer360"
+      description: "Customer360 parent page — overall Customer360 schema architecture and column definitions"
+    - url: "https://godaddy-corp.atlassian.net/wiki/spaces/BI/pages/4042131239/Customer+Metrics"
+      description: "Customer Metrics design — metrics and their derivation from the customer lifecycle"
+
+  alation:
+    enabled: true
+    search_query: null
+    max_queries: 5
+
+  additional_docs: []

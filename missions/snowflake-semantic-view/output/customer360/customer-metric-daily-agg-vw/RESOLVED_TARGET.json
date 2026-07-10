@@ -1,0 +1,18 @@
+{
+  "schema": "customer360",
+  "table_hyphen": "customer-metric-daily-agg-vw",
+  "table_underscore": "customer_metric_daily_agg_vw",
+  "lake_table_path": "customer360/customer-metric-daily-agg-vw",
+  "semantic_view_name": "customer360_customer_metric_daily_agg",
+  "snowflake_database": "MARKETING_CORE_DEV",
+  "confidence": "high",
+  "evidence": [
+    "DAG customer_metric_daily_agg_dag.py: SuccessNotificationOperator(db_name='customer360', table_name='customer_metric_daily_agg_vw')",
+    "Policy yaml outputs: customer360.customer_metric_daily_agg_vw (datalake platform)",
+    "Lake catalog: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-metric-daily-agg-vw/table.yaml",
+    "Lake catalog: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-metric-daily-agg-vw/table.ddl",
+    "DAG DQ task: database='customer360', table='customer_metric_daily_agg_vw'",
+    "PySpark FEED_NAME='customer_metric_daily_agg', write target='customer_core_conformed.customer_metric_daily_agg' (staging); lake publish adds _vw suffix",
+    "Alation table ID 7038346: name=customer_metric_daily_agg_vw"
+  ]
+}

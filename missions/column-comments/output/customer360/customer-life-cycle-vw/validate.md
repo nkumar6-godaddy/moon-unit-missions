@@ -60,18 +60,21 @@ If no rewrites were needed, say so in one line under "Columns rewritten".
 
 - Total columns checked: 34
 - Comments condensed (were > 255): 0
-- Final max comment length: 250 (active_paid_subscription_list)
+- Final max comment length: 168 (column: customer_id)
 - Result: PASS
 
 ## Columns rewritten (if any)
 
-No rewrites were needed. All 34 column comments are within the 255-character limit.
+No rewrites were needed. All 34 column comments were already ≤ 255 characters.
 
 **The agent's final response to the user was:**
-All 34 column `COMMENT` strings in `catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl` are within the 255-character limit. The DDL file was left **unchanged**.
+All checks complete. Here's a summary of what was done:
 
-**Summary:**
-- Total columns checked: 34
-- Comments over 255 chars: **0**
-- Max comment length: **250** chars (`active_paid_subscription_list`)
-- Result: **PASS**
+**Validation Result: PASS**
+
+- Checked all **34** `COMMENT` strings in `catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl`
+- **0** comments exceeded 255 characters
+- Maximum comment length found: **168 chars** (`customer_id`)
+- Range: 100–168 characters across all columns
+- The DDL file was **left unchanged**
+- Appended the validation summary to `validate.md`

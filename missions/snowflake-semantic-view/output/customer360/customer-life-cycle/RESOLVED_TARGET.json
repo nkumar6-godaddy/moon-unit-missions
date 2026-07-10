@@ -1,0 +1,16 @@
+{
+  "schema": "customer360",
+  "table_hyphen": "customer-life-cycle-vw",
+  "table_underscore": "customer_life_cycle_vw",
+  "lake_table_path": "customer360/customer-life-cycle-vw",
+  "semantic_view_name": "customer360_customer_life_cycle_vw",
+  "snowflake_database": "MARKETING_CORE_DEV",
+  "confidence": "high",
+  "evidence": [
+    "customer360/customer-metrics/src/policies/customer_life_cycle_dag.yaml:160 — outputs.name=customer360.customer_life_cycle_vw",
+    "customer360/customer-metrics/src/dag/customer_life_cycle_dag.py:367 — SuccessNotificationOperator(db_name='customer360', table_name='customer_life_cycle_vw')",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/ — lake table entry exists",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml:38 — sloIdentifier=customer360.customer_life_cycle_vw",
+    "customer360/customer-metrics/src/data_quality/constraints/customer_life_cycle_vw.json — DQ constraints reference customer360.customer_life_cycle_vw"
+  ]
+}

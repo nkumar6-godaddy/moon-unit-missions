@@ -1,0 +1,17 @@
+{
+  "schema": "customer360",
+  "table_hyphen": "dim-customer-vw",
+  "table_underscore": "dim_customer_vw",
+  "lake_table_path": "customer360/dim-customer-vw",
+  "confidence": "high",
+  "evidence": [
+    "dim_customer_dag.py: call_lake_api task posts completion for customer360.dim_customer_vw",
+    "dim_customer_dag.py: call_lake_api_hist task posts for customer360.dim_customer_history_vw",
+    "dim_customer_iceberg_common.py:11 DELTA_DEST_TABLE = 'customer_core_conformed.dim_customer'",
+    "src/dag/templates/create_view.sql: CREATE OR REPLACE VIEW {view_database}.dim_customer_vw ... FROM {table_database}.dim_customer WHERE current_record_flag = true",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/dim-customer-vw/table.yaml: confirmed lake registry entry",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/dim-customer-vw/table.ddl: 30-column DDL confirmed",
+    "INPUT.md lake_table_override=customer360/dim-customer-vw: consistent with code (no conflict)",
+    "src/policies/dim_customer_dag.yaml: declared output customer360.dim_customer_vw confirmed"
+  ]
+}

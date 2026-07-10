@@ -1,0 +1,444 @@
+version: "1"
+input:
+  source: snowflake-semantic-view
+  url: "__GENERATED_BY_RUN_SH__"
+  content: "__GENERATED_BY_RUN_SH__"
+
+plan:
+  repositories:
+    - url: "__GENERATED_BY_RUN_SH__SOURCE_REPO_URL__"
+      writable: false
+      description: >
+        Source repository containing the authoritative PySpark script and related
+        DAG/DDL/policy/data-quality folders.
+    - url: https://github.com/gdcorp-dna/lake.git
+      writable: false
+      description: >
+        GoDaddy Data Lake registry. Contains table DDL and metadata YAML files
+        under catalog/config/prod/us-west-2/<db>/<table>/ or
+        catalog/config/prod/dlms-api/us-west-2/<db>/<table>/.
+
+  stages:
+    - name: research
+      model: claude-sonnet-4-6
+      skills: []
+      output: research.md
+      prompt: |
+        You are a Data Governance analyst researching a Data Lake table to produce a
+        Snowflake Semantic View YAML. This stage combines fact-gathering AND analysis
+        into a single pass. Do not guess. If something is unknown, say "Unknown" and
+        explain what you checked.
+
+        Read `docs/snowflake-spec-reference.md` in the workspace for the Snowflake
+        semantic view YAML schema contract.
+
+        # ═══════════════════════════════════════════════════════════════
+        # PART A — GATHER (verifiable facts from code and secondary sources)
+        # ═══════════════════════════════════════════════════════════════
+
+        ## Source-of-truth rule
+        The PySpark script and the DAG that calls it are the source of truth. If Alation,
+        Confluence, DDL, policies, or other docs conflict with code, treat the code as
+        correct and record the discrepancy for validation.
+
+        ## Step 1: Read INPUT.md
+        Read `INPUT.md` in your workspace. It contains:
+        - PySpark GitHub URL + parsed repo/ref/path
+        - Repository folder names inside the container (under `repos/`)
+        - Optional lake table override and semantic view name
+        - Snowflake database name for base_table.database
+        - Supporting docs (Confluence URLs, other URLs)
+        - Alation configuration
+
+        Use INPUT.md as the contract for what to fetch and where to look.
+
+        ## Step 2: Check out the exact Git ref for the source repo
+        INPUT.md includes the desired git ref (branch/tag/SHA) and the source repo URL.
+        The Moon Units framework clones repos into `repos/<repo-name>/` where repo-name is
+        derived from the git URL (e.g., `https://github.com/org/my-repo.git` → `repos/my-repo/`).
+
+        Determine the source repo folder name from the URL in INPUT.md (strip org and .git).
+        Then checkout the desired ref:
+
+        ```bash
+        git -C repos/<repo-name> fetch --all --tags
+        git -C repos/<repo-name> checkout <ref_from_INPUT_md>
+        ```
+
+        ## Step 3: Read the PySpark script and the calling DAG
+        - Read the PySpark file at the path from INPUT.md.
+        - Locate and read the DAG file that calls it. Per repo convention, from the parent
+          folder of the pyspark folder you should find sibling folders: `dag/`, `policies/`,
+          `data_quality/`, `ddl/`.
+        - The DAG must be treated as authoritative for schedule/cadence, dependencies, and
+          which job/version is run.
+        - **Extract all join conditions** (explicit `on=` keys, join predicates) — these
+          will become Snowflake relationships in the generate stage.
+
+        ## Step 4: Collect nearby repo context (secondary sources)
+        - Read relevant files under sibling folders:
+          - `ddl/` (table DDLs) — helpful but may be stale
+          - `policies/` — helpful but may be stale
+          - `data_quality/` — checks and expectations (treat as evidence, not truth)
+        Record any conflicts with code explicitly.
+
+        ## Step 5: Fetch Confluence pages (if provided)
+        For each URL in INPUT.md under CONFLUENCE PAGES, fetch page content via Atlassian REST API.
+        The page ID is the numeric part of the URL path.
+
+        **IMPORTANT: Parent pages may link to child pages.** Fetch the provided page first,
+        list child pages, identify relevant ones, fetch only those.
+
+        Credentials:
+        - Prefer `MOONUNIT_JIRA` env var (JSON: {"url","email","api_token"}) OR
+        - `MOONUNIT_ATLASSIAN` env var (JSON: {"email","api_token"})
+
+        Example:
+        ```bash
+        ATLASSIAN_CREDS=$(node -e "const j=JSON.parse(process.env.MOONUNIT_JIRA || process.env.MOONUNIT_ATLASSIAN); console.log(j.email + ':' + j.api_token)")
+        curl -s -u "$ATLASSIAN_CREDS" \
+          "https://godaddy-corp.atlassian.net/wiki/rest/api/content/{PAGE_ID}?expand=body.storage"
+        ```
+
+        Extract content relevant to business meaning, grain, metrics, filters, SLAs, ownership.
+
+        ## Step 6: Alation lookup (if enabled)
+        If INPUT.md says Alation is enabled:
+        1. Check if `MOONUNIT_ALATION` env var is available; skip if not set.
+        2. Create API token via Alation integration API.
+        3. Search for the target table (Lake entry) and record descriptions/custom fields.
+        4. Fetch saved queries referencing the table (use Max queries from INPUT.md).
+
+        For each Alation query, record: Query ID, Title, Author, Description, SQL (verbatim).
+        These become candidate `verified_queries` in the Snowflake YAML.
+
+        ## Step 7: Enumerate tables and column schemas
+        For EVERY table referenced in the PySpark (read and write targets):
+        - Record table name (schema.table form)
+        - Record whether it is read, written, or both
+        - If a lake DDL exists in `repos/lake/`, read `table.ddl` and list columns with types
+        - If only in-repo DDL exists, read that instead (note it may be stale)
+        - Record any join keys used with this table
+
+        # ═══════════════════════════════════════════════════════════════
+        # PART B — ANALYZE (map ETL to Snowflake semantic view concepts)
+        # ═══════════════════════════════════════════════════════════════
+
+        ## Step 8: Identify the target table
+        Determine the final output lake table populated by this PySpark job.
+        - Prefer direct evidence in code: write targets, insertInto, saveAsTable, etc.
+        - If `lake_table_override` is provided, use it only if it does not contradict code.
+        - Record grain (what one row represents) with evidence.
+
+        ## Step 9: Deep lineage resolution — MANDATORY for EVERY source table
+        For EACH table referenced in the PySpark:
+        1. Check if it exists as a lake table in `repos/lake/catalog/config/prod/`.
+           Try both `us-west-2/<schema>/<table-hyphenated>/` and
+           `dlms-api/us-west-2/<schema>/<table-hyphenated>/`.
+        2. If NOT a lake table, recursively trace upstream PySpark scripts until you reach
+           a lake table or external system.
+        3. If traversal fails: record `UNRESOLVED: <table> — <reason>`
+
+        **CRITICAL:** Snowflake `base_table` values must reference lake tables only.
+        Never use intermediate/staging tables as base tables.
+
+        ## Step 10: Classify tables (fact vs dimension)
+        For each resolved lake table included in the semantic view:
+        - **Target table** = primary fact table (the table this PySpark populates)
+        - **Upstream tables joined TO** = dimension tables
+        - Record classification with evidence (join direction in PySpark)
+
+        ## Step 11: Classify columns into Snowflake categories
+        For EACH column on each table, classify into one of:
+        - **dimensions**: categorical attributes (strings, IDs, enums, flags, codes)
+        - **time_dimensions**: date/timestamp/time columns
+        - **facts**: row-level quantitative values (amounts, counts, numeric measures)
+
+        For EACH column, also produce a **lineage-enriched description** that includes:
+        1. Business meaning of the column
+        2. Source lake table and column it is derived from (first lake table boundary)
+        3. Transformation logic applied (joins, CASE, COALESCE, casts, aggregations, etc.)
+
+        Example descriptions (detailed, C1-style):
+        - "Unique numeric ID for the shopper profile; composite PK component. Derived from
+          enterprise.dim_subscription_history.shopper_id for subscription-active customers;
+          from enterprise.dim_bill_shopper_id_xref.merged_shopper_id for TTM-only customers"
+        - "Country code where customer was acquired. From
+          enterprise.dim_new_acquisition_shopper.bill_country_code, uppercased with UK→GB
+          normalization applied in ETL"
+        - "Tenure in years. Calculated as CAST(datediff(partition_eval_mst_date,
+          customer_acquisition_mst_date) / 365 AS INT); acquisition date sourced from
+          enterprise.dim_new_acquisition_shopper and enterprise.dim_subscription_history"
+
+        **CRITICAL lineage rules:**
+        - Trace THROUGH intermediate tables but NEVER cite them in the description — only
+          cite the FIRST lake table boundary.
+        - If traversal fails: use `UNRESOLVED — requires manual input` in the description.
+
+        ## Step 12: Extract relationships
+        From PySpark join conditions:
+        - Map each join to Snowflake relationship format:
+          `left_table` (FK side) → `right_table` (PK side)
+        - Record `relationship_columns` as `left_column`/`right_column` pairs
+        - Name relationships descriptively (e.g., `orders_to_customers`)
+
+        ## Step 13: Identify metrics
+        From PySpark aggregations, Alation queries, and Confluence docs:
+        - Name each metric (snake_case)
+        - SQL aggregate expression (SUM/COUNT/AVG/etc.)
+        - Description and synonyms
+        - Only include metrics with evidence — do not invent
+
+        ## Step 14: Extract candidate verified_queries
+        From Alation saved queries (Step 6):
+        - Convert each saved query to a Snowflake `verified_queries` entry:
+          name, question (from title/description), sql (verbatim)
+        - Only include queries that are directly relevant and correct
+
+        ## Step 15: Determine semantic view metadata
+        - View name: use `semantic_model_name` from INPUT.md if provided, else derive from
+          schema + table (e.g., `customer360_customer_life_cycle`)
+        - View description: from Confluence, Alation, or code comments
+        - custom_instructions draft: grain, required partition filter, PK caveats, array-field
+          warnings
+
+        ## Step 16: Output (append to research.md)
+        Append a structured report with TWO clearly labeled sections:
+
+        ### Part A: Gathered Facts
+        - PySpark job identity (repo/ref/path), output write target(s)
+        - DAG identity (path, schedule, params)
+        - Table inventory — all referenced tables with read/write role and column schemas
+        - Join conditions — explicit join keys extracted from PySpark
+        - Aggregation expressions — SUM/COUNT/AVG/GROUP BY patterns found in PySpark
+        - DDL/policy/DQ files consulted
+        - Confluence summaries (if any)
+        - Alation section (table info + saved queries if fetched)
+        - Conflicts / discrepancies section
+
+        ### Part B: Snowflake Semantic View Analysis
+        - Target table resolution with evidence
+        - Lineage resolution table (intermediate → lake)
+        - **Table classification table**: | Lake Table | Logical Name | Role (fact/dim) | base_table | primary_key |
+        - **Materialized direct-reads table**: | Lake Table | materialized_in_fields | evidence |
+        - **Excluded dimensions table**: | Lake Table | reason | fields_on_fact |
+        - **Relationship table**: | name | left_table | right_table | left_column | right_column | evidence |
+        - **Column inventory per table** with Snowflake classification:
+          | Column | Snowflake Category | expr | data_type | Description (with lineage) | synonyms |
+        - **Metrics table**: | name | expression | description | evidence |
+        - **Verified queries table**: | name | question | sql | source |
+        - **Semantic view metadata**: name, description, custom_instructions draft
+        - **Do-not-claim table**: | item | reason | — items that must NOT become tables or metrics
+
+        ## Step 17: Write RESOLVED_TARGET.json (required)
+        Create `RESOLVED_TARGET.json` in workspace root:
+        ```json
+        {
+          "schema": "customer360",
+          "table_hyphen": "customer-life-cycle-vw",
+          "table_underscore": "customer_life_cycle_vw",
+          "lake_table_path": "customer360/customer-life-cycle-vw",
+          "semantic_view_name": "customer360_customer_life_cycle",
+          "snowflake_database": "GODADDY_LAKE",
+          "confidence": "high",
+          "evidence": ["file/line references"]
+        }
+        ```
+
+        ## Step 18: Write PROVENANCE.json (required)
+        Create `PROVENANCE.json` in workspace root with lineage preservation contract:
+        ```json
+        {
+          "grain": "one row per (shopper_id, partition_eval_mst_date)",
+          "primary_key_notes": "Composite PK; customer_id is not unique and may be null",
+          "partition_filter": "partition_eval_mst_date",
+          "intermediate_tables": [],
+          "transitive_sources": [],
+          "materialized_direct_reads": [],
+          "excluded_dimensions": [],
+          "array_fields": [],
+          "legacy_sources": [],
+          "do_not_claim": []
+        }
+        ```
+        Use empty arrays `[]` for sections with no entries.
+
+    - name: generate
+      model: claude-sonnet-4-6
+      skills: []
+      output: generate.md
+      prompt: |
+        You are generating a **Snowflake Semantic View YAML** for a Data Lake table.
+        Your output must be 100% accurate. Never fabricate fields, relationships, or metrics.
+
+        Read `docs/snowflake-spec-reference.md` for the complete Snowflake schema contract.
+
+        ## Step 1: Read all prior artifacts
+        Read:
+        - `INPUT.md` — includes USER NOTES (HIGHEST PRIORITY after code) if provided
+        - `research.md` — contains gathered facts (Part A) and analysis (Part B)
+        - `RESOLVED_TARGET.json`
+        - `PROVENANCE.json` — lineage preservation contract
+
+        USER NOTES override Confluence/Alation — but NEVER override PySpark/DAG code.
+
+        ## Step 2: Create SNOWFLAKE_SEMANTIC_VIEW.yaml
+        Create `SNOWFLAKE_SEMANTIC_VIEW.yaml` in the workspace root following this structure:
+
+        ```yaml
+        name: <from RESOLVED_TARGET.json semantic_view_name>
+        description: <business description>
+
+        tables:
+          - name: <logical_table_name>
+            description: <text>
+            base_table:
+              database: <from RESOLVED_TARGET.json snowflake_database>
+              schema: <schema>
+              table: <table_name>
+            dimensions:
+              - name: <column_name>
+                description: "<business meaning>. <lineage + transformation details>"
+                expr: <scalar_sql_expression>
+                data_type: <SNOWFLAKE_TYPE>
+                synonyms: [<terms>]
+            time_dimensions:
+              - name: <column_name>
+                description: "<business meaning>. <lineage + transformation details>"
+                expr: <scalar_sql_expression>
+                data_type: <SNOWFLAKE_TYPE>
+            facts:
+              - name: <column_name>
+                description: "<business meaning>. <lineage + transformation details>"
+                expr: <scalar_sql_expression>
+                data_type: <SNOWFLAKE_TYPE>
+            metrics:
+              - name: <metric_name>
+                description: <text>
+                expr: <aggregate_sql_expression>
+
+        relationships:
+          - name: <rel_name>
+            left_table: <logical_table_name>
+            right_table: <logical_table_name>
+            relationship_columns:
+              - left_column: <column>
+                right_column: <column>
+
+        verified_queries:
+          - name: <query_name>
+            question: <natural_language_question>
+            sql: |
+              <sql_query>
+
+        custom_instructions: |
+          <grain, partition filter, PK caveats, array-field warnings>
+        ```
+
+        ## Generation rules (non-negotiable)
+        1. `expr` is a plain SQL expression string — no dialect wrappers
+        2. Dimension/time_dimension/fact `expr` values are **scalar** (no SUM/COUNT/AVG)
+        3. Metric `expr` values use **aggregates** (SUM/COUNT/AVG/MIN/MAX)
+        4. `base_table` uses the `snowflake_database` from RESOLVED_TARGET.json
+        5. Include the target table AND all resolved upstream dimension tables
+        6. Every dimension/time_dimension/fact `description` MUST include:
+           - Business meaning of the column
+           - Source lake table.column it is derived from
+           - Transformation logic (joins, CASE, COALESCE, casts, etc.)
+           This is the DETAILED INLINE format (C1-style). Example:
+           "Country code where customer was acquired. From
+           enterprise.dim_new_acquisition_shopper.bill_country_code, uppercased with
+           UK→GB normalization applied in ETL"
+        7. Relationships must reference existing table names
+        8. Only include metrics with evidence from research.md
+        9. `verified_queries` sourced from Alation saved queries in research.md
+        10. `custom_instructions` must include: grain, required partition filter,
+            primary-key caveats, and array-field warnings
+        11. Omit fields/relationships/metrics you cannot support with evidence
+        12. For every field listed in `PROVENANCE.json` → `transitive_sources` or
+            `materialized_direct_reads`, append upstream provenance to the field
+            `description` (e.g. "Derived from enterprise.dim_subscription_history via
+            customer_active_subscription_detail_driver; not directly joinable")
+        13. For every entry in `PROVENANCE.json` → `array_fields`, document in the
+            field `description` and mention in `custom_instructions` — do not define
+            metrics that unnest or aggregate arrays
+        14. Every item in `PROVENANCE.json` → `do_not_claim` must NOT appear as a
+            table, relationship, or metric — preserve info in `custom_instructions`
+        15. `data_type` values must be valid Snowflake types (VARCHAR, NUMBER, DATE, etc.)
+        16. **ASCII only**: All text (names, descriptions, synonyms, custom_instructions)
+            must contain only ASCII characters (code points 0-127). Use '--' instead of
+            em dashes, '->' instead of arrows, and straight quotes only. Never use smart
+            quotes, typographic dashes, or Unicode symbols.
+        17. **Spaces only**: Use 2-space indentation throughout. Never use tab characters.
+        18. **Line length**: Keep `expr` values under 500 characters. For `verified_queries`
+            SQL, keep each individual line under 500 characters (use YAML block scalars
+            `|` or `>` and wrap long SQL).
+        19. **No duplicate YAML keys**: Ensure no top-level key appears more than once
+            in the output file. YAML silently discards earlier duplicates.
+        20. **Relationship integrity**: Every `left_table` and `right_table` in
+            `relationships` must match a `name` under `tables`. Relationships must not
+            form cycles (A->B->C->A).
+        21. **No BOM**: Output the file as plain UTF-8 without a byte-order mark.
+
+        ## Step 3: Append summary to generate.md
+        Append:
+        - Semantic view name
+        - Table count (fact + dimensions)
+        - Column count per table (dimensions + time_dimensions + facts)
+        - Relationship count
+        - Metric count
+        - Verified query count
+        - Provenance fields enriched (count and list)
+        - Do-not-claim items preserved in custom_instructions
+        - Items omitted due to insufficient evidence
+        - Key sources used
+
+    - name: validate
+      model: claude-sonnet-4-6
+      skills: []
+      output: validate.md
+      prompt: |
+        You are a validation agent for a Snowflake Semantic View YAML. Your job is to run
+        the deterministic validation script, read its report, and fix any failures.
+
+        ## Step 1: Run the validation script
+        Execute the validator:
+        ```bash
+        python scripts/validate_snowflake_yaml.py SNOWFLAKE_SEMANTIC_VIEW.yaml \
+          --report VALIDATION_REPORT.json
+        ```
+
+        ## Step 2: Read the validation report
+        Read `VALIDATION_REPORT.json`. Check the `summary.overall` field:
+        - If `PASS`: no structural fixes needed, proceed to Step 4.
+        - If `FAIL`: proceed to Step 3.
+
+        ## Step 3: Fix failures (if any)
+        For each check with `status: "FAIL"` in the report:
+        - Read the `details` to understand the issue.
+        - Edit `SNOWFLAKE_SEMANTIC_VIEW.yaml` to fix the structural/schema issue.
+        - Common fixes:
+          - Missing `name` or `expr` on a dimension/fact/metric
+          - Missing `base_table` fields (database, schema, table)
+          - Aggregate function in a dimension/fact expr → move to metrics
+          - Missing aggregate in metric expr → add appropriate aggregate
+          - Duplicate names → rename to be unique
+          - Relationship referencing non-existent table → fix table name or remove
+          - Invalid `access_modifier` value → use `public_access` or `private_access`
+
+        After fixing, re-run the validation script:
+        ```bash
+        python scripts/validate_snowflake_yaml.py SNOWFLAKE_SEMANTIC_VIEW.yaml \
+          --report VALIDATION_REPORT.json
+        ```
+
+        Repeat until `summary.overall` is `PASS` or you have made 3 attempts.
+
+        ## Step 4: Append report to validate.md
+        Append:
+        - Semantic view name
+        - Overall result: PASS or FAIL
+        - Total checks, passed, warnings, failed
+        - Any fixes applied (list each fix)
+        - Any remaining warnings (acceptable if not failures)
+        - Final validation script output summary

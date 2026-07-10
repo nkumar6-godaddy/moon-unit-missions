@@ -22,4 +22,4 @@ Output must conform to OSI Core Spec v0.2.0.dev0 (see docs/osi-spec-reference.md
 ## ALATION
 - Enabled: true
 - Search query override: 
-- Max queries (for metric/usage context): 5
+- Max queries (for metric/usage context): 10

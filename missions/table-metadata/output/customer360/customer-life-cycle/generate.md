@@ -4,10 +4,14 @@ Your output must be 100% accurate. Never fabricate. Avoid too much technical imp
 
 ## Step 1: Read INPUT.md, gather.md, analyze.md
 Read:
-- `INPUT.md`
+- `INPUT.md` — includes USER NOTES (HIGHEST PRIORITY) if provided
 - `gather.md`
 - `analyze.md`
 - `RESOLVED_TARGET.json`
+
+**USER NOTES (if present in INPUT.md):** Treat as verified expert input from the
+table owner. Incorporate into A2, B1, C4, C7, and other relevant sections. USER NOTES
+override Confluence, Alation descriptions, and DDL — but NEVER override PySpark/DAG code.
 
 ## Step 2: Create the final metadata document
 Create a new markdown file in the workspace root named:
@@ -50,21 +54,101 @@ Use this exact heading skeleton (keep headings even if content is missing):
   - `### E1. Data Quality Checks`
   - `### E2. Best Practices & Tips`
   - `### E3. Related Articles & Documentation`
+- `## REFERENCES` (deduplicated list at end of document)
 
 Content guidance (follow the PDF):
-- A1 should be a compact key-value table and MUST include grain.
-- B2 should be a bullet list of natural-language questions.
-- C1 should be a single readable schema table with a "Source Table(s)" column.
-  **CRITICAL C1 RULE**: The "Source Table(s)" column must ONLY contain:
-    - Lake tables (e.g., `enterprise.dim_subscription`) — the ultimate authoritative source
-    - External systems (e.g., "S3 direct read")
-    - `UNRESOLVED - requires manual input` if analyze.md marked it unresolved
-  NEVER list intermediate/local/staging tables (e.g., `*_stg`, `*_conformed.*`,
-  `*_driver`) as sources. These are implementation details. Use the column-level
-  lineage mapping from analyze.md to find the lake table behind each intermediate table.
+- A1 should be a compact key-value table. The FIRST rows must be the access/identity
+  information in this exact order (if available from gather.md Alation section):
+    1. Table Name (the table name as seen in Redshift)
+    2. Database — always "Redshift - Serverless - Dev" (use the dev.* entry, never bi.*)
+    3. Schema (the Redshift schema, e.g. `customer360`)
+    4. Alation URL (link to the dev Redshift Serverless table entry in Alation)
+    5. Table ID (Alation table ID for the Redshift entry)
+    6. Type (e.g., View, Table)
+    7. Description (brief table description from Alation or Confluence)
+    8. Lake Table Name
+    9. Lake Database — "GoDaddy Central Data Lake (Prod)"
+    10. Lake Schema
+    11. Lake Alation URL
+    12. Lake Alation ID
+  Then continue with the remaining technical metadata (Grain, Partition Key,
+  Storage Format, Data Tier, SLA, Refresh Cadence, etc.).
+  If Alation was skipped or URLs are unavailable, omit those rows but keep the rest.
+  A1 MUST include grain.
+- A2 should include a narrative paragraph, a "Key Features:" bullet list, and a
+  purpose statement explaining business value (similar to sample format).
+- B2 must contain TWO parts:
+  1. **Questions this table answers** — bullet list of natural-language questions (optional
+     if Alation queries are available; sample format leads with query cards).
+  2. **Alation Queries** (if gather.md has ## Alation Queries with results) — for EACH
+     query, use this format (use empty string if a field is unknown):
+
+     #### <Title>
+
+     | Field | Value |
+     |---|---|
+     | Query ID | <id> |
+     | Title | <title> |
+     | Author | <author or "Not specified"> |
+     | Description | <description> |
+     | Schedule | <schedule or "Manual execution"> |
+     | Last Saved | <date> |
+     | Last Run | <date or "Not recorded"> |
+     | Datasource | <datasource> |
+     | Alation Query URL | <url or "Query #<id>"> |
+
+     Follow the metadata table with a 1-2 sentence descriptive paragraph explaining
+     what the query does and how it uses this table. Do NOT include the full SQL body
+     in B2 (keep B2 readable; reference the Alation URL instead).
+
+     If Alation was skipped or no queries were found, use the "Questions this table
+     answers" bullet list instead.
+- C1 should be a single readable schema table with EXACTLY these columns:
+  | # | Name | Data Type | Description | Column Lineage | Category | Sample Values | Key Statistics |
+  Column definitions:
+  - **#**: Row number (1-based)
+  - **Name**: Column name (no backticks in cell — plain name)
+  - **Data Type**: SQL data type (uppercase, e.g., STRING, DATE, INTEGER)
+  - **Description**: Business-facing description; include PK/UK/@ForeignKey annotations if in DDL
+  - **Column Lineage**: Descriptive transformation text referencing the first lake
+    table.column (e.g., "Direct mapping from dim_country_vw.country_name joined on
+    acquisition country code" or "Calculated as datediff(partition_eval_mst_date,
+    customer_acquisition_mst_date) / 365"). Use `UNRESOLVED - requires manual input`
+    if analyze.md marked it unresolved.
+  - **Category**: Classify each column as one of: `Identifier`, `Categorical`, `Date`,
+    `Numeric`, `Boolean`, `Text`, `Amount`, `Timestamp`, `Array`
+  - **Sample Values**: JSON array of 3-5 representative values from Alation profiling
+    (gather.md). Leave empty if not available — do NOT fabricate.
+  - **Key Statistics**: Brief stats from Alation profiling: distinct count, value range,
+    average, null count, common values. Leave empty if not available — do NOT fabricate.
+  Do NOT include extra columns (e.g., "Source Table(s)", "Transformation / Notes").
+  **CRITICAL C1 RULE**: Column Lineage must describe derivation from the FIRST upstream
+  lake table — NOT that lake table's own sources. NEVER list intermediate/local/staging
+  tables (e.g., `*_stg`, `*_conformed.*`, `*_driver`) as sources.
+- D1 should use multi-depth lineage tables when available from analyze.md or gather.md:
+  - **Upstream Sources**
+    - Depth 1 Upstream Tables (Total: N)
+    - Depth 2 Upstream Tables (Total: N) — only if resolvable
+  - **Downstream Sources**
+    - Depth 1 Downstream Tables (Total: N)
+  Each table: | Table Name | Database | Schema | Type | Platform |
+  Platform values: `lake`, `redshift`, `s3`, or `—` for unknown.
+  If multi-depth lineage is unavailable, fall back to a flat list of direct upstream
+  lake tables with their roles.
 - C8 should include 2-5 short, annotated query patterns (avoid huge queries; keep focused).
 - D2 should identify repo + file paths + orchestration tool + compute platform.
-- D4 should summarize creation logic (no long code walk-through).
+- D4 must use these sub-sections (in order):
+  1. **ETL Processes** — narrative paragraph describing the pipeline, followed by
+     numbered implementation steps (dependency checks, EMR, transformations, persistence, DQ)
+  2. **Data Processing Steps** — bullet list of key transformation logic (status derivation,
+     enrichment joins, aggregations, derived columns, special-case handling)
+  3. **Error Handling and Logging** — bullet list (Slack alerts, retries, cluster lifecycle, etc.)
+  4. **Data Validation** — bullet list (DQ operators, business rule checks, partition validation)
+  Keep each sub-section concise; no long code walk-through.
+- **REFERENCES** section at the end of the document: deduplicated list of:
+  - Main Table and Lake Table identifiers (schema.table)
+  - All Confluence article titles referenced in the doc
+  - All URLs (Alation table/article links, Confluence, GitHub repo/file links, Query links)
 
 ### Requirements
 - If a section cannot be completed accurately, include:
@@ -85,77 +169,70 @@ Append to `generate.md`:
 
 ---
 
-## Generate Stage Summary
+## Stage: generate — TABLE_METADATA.md
 
-**Generated:** 2026-05-28
-**Target table resolved:** `customer360.customer_life_cycle_vw` (confidence: high)
-**Output file:** `TABLE_METADATA.md`
+**Generated:** 2026-06-10
+**Target table resolved:** `customer360.customer_life_cycle_vw`
+**Internal staging table:** `customer_core_conformed.customer_life_cycle`
+**Confidence:** HIGH
 
-### Sections requiring manual input: 3
+### Sections requiring manual input
+Count: **0** — all 20 sections (A1–E3) were completed from verified sources.
 
-| Section | Tag | Missing Information |
-|---|---|---|
-| A3 | BA | Named Business Analyst owner and formal data steward not identified in code, policy, or Confluence |
-| E1 | DG | Only PK uniqueness DQ checks found; confirm whether additional checks exist in external DQ platform |
-| E3 | DG | Alation table/column documentation not retrieved (MOONUNIT_ALATION credentials not available) |
+No `<!-- REQUIRES_MANUAL_INPUT -->` tags were inserted. All facts are backed by:
+- PySpark code (`customer_life_cycle.py`)
+- DAG code (`customer_life_cycle_dag.py`)
+- Lake registry (`table.yaml`, `table.ddl`)
+- Confluence pages (Customer Lifecycle ID 3970861345, Customer360 ID 3779199819, Customer Metrics ID 4042131239)
+- Alation (Lake table ID 7038345, Dev Serverless ID 7038917, 10 saved queries)
+- DQ constraints (`customer_life_cycle.json`)
+- Policy YAML (`customer_life_cycle_dag.yaml`)
 
 ### Key sources used
 
-| Source | Used For |
+| Source | Details |
 |---|---|
-| PySpark: `customer_life_cycle.py` (main, 7523b6d5) | Column definitions, derivation logic, always-on filters, write target, ETL steps |
-| DAG: `customer_life_cycle_dag.py` | Schedule, SLA, task flow, EMR config, upstream dependency sensors, consumers |
-| DDL: `customer_life_cycle.ddl`, `create_customer_life_cycle.sql` | Column types, Redshift schema |
-| Policy: `customer_life_cycle_dag.yaml` | SLA maxDurationMins, TIER_4, declared inputs/outputs |
-| DQ: `customer_life_cycle.json`, `customer_life_cycle_vw.json` | PK definition, DQ check scope |
-| Lake: `table.yaml` + `table.ddl` (customer-life-cycle-vw) | Data tier, SLO schedule, partition key, consumer groups, legacyLookBackEnabled |
-| Intermediate PySpark scripts (4): `customer_ttm_payment_driver.py`, `customer_active_subscription_detail_driver.py`, `active_customer_stg.py`, `subscription_grace_policy.py` | Recursive lineage traversal to resolve intermediate tables to lake sources |
-| Confluence: pages 3779199819, 3970861345, 4387965088 | Business purpose, grain confirmation, OSI/OWL context, design doc |
-| Alation | Skipped — credentials not available |
+| PySpark | customer360/customer-metrics/src/pyspark/customer_life_cycle.py (authoritative for all logic) |
+| DAG | customer360/customer-metrics/src/dag/customer_life_cycle_dag.py (schedule, task flow, SLA, alerts) |
+| Lake table.ddl | repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl |
+| Lake table.yaml | repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml (SLA, data tier, consumers) |
+| Confluence | Customer Lifecycle (3970861345) — churn/reactivation/merge/acquisition date business rules |
+| Alation Lake | Table ID 7038345 — extended description and key features narrative |
+| Alation Dev RS | Table ID 7038917 — Redshift dev entry metadata |
+| Alation Queries | 10 most recently saved queries (IDs: 123877, 139259, 139061, 138820, 138821, 138886, 135046, 123350, 138288, 138291) |
+| DQ constraints | data_quality/constraints/customer_life_cycle.json — composite PK evidence |
+| Policy YAML | policies/customer_life_cycle_dag.yaml — SLA max duration, severity tier |
 
-### Lineage resolution summary
+### Unresolved lineage items
 
-- **Total direct upstream references in target PySpark:** 16 (3 intermediate `customer_core_conformed.*` tables + 12 lake tables + 1 external S3)
-- **Intermediate tables resolved:** 4 (all fully resolved to lake sources via recursive script traversal)
-- **Total distinct lake + external sources:** 20 lake tables + 1 external S3 (`ads_bill_line_ext`)
-- **UNRESOLVED entries:** 0
-- **C1 Source Table(s) column:** uses only lake tables and external S3; no intermediate/staging tables listed
-- **Stale lake catalog lineage noted:** 8 entries in the lake catalog lineage predate the current ETL architecture; not included in the metadata document (code is authoritative)
+- **External S3 source** (`s3://gd-ckpetlbatch-prod-analytic/analytic/ads_bill_line_ext/`): Not registered as a lake table; hardcoded to prod bucket in PySpark. Documented in D1 as external S3 platform with pre-2022-08 scope. No further resolution possible without lake registration.
+- **Depth 2 upstream tables**: Not derived — would require reading each Depth 1 lake table's own `table.yaml` lineage metadata. Out of scope per lineage documentation rules.
+- **Column profiling (Sample Values / Key Statistics in C1)**: No Alation profiling data was available from the gather stage (Alation v2 table API did not return per-column statistics). All Sample Values and Key Statistics cells in C1 are intentionally empty.
+
+### Discrepancies surfaced and handled
+
+1. Stale Hive DDL PK comment → overridden by DQ constraint in C2 and C4
+2. Alation description: PK = `customer_id` alone → corrected in C2 and C4
+3. Alation description: `customer_state_enum` includes 'fraud' → corrected in C7 and C4
+4. Confluence references `analytic_feature.shopper_tenure` as tenure source → corrected in C4
+5. DAG SLA field = "N/A" → lake registry SLA used in A1 and D3
+6. Lake registry lists 7 extra upstream tables → validated as reached through intermediates; included in D1 depth-1 lineage
 
 **The agent's final response to the user was:**
-`TABLE_METADATA.md` has been created and `generate.md` has been updated. Here is a summary of what was produced:
+`TABLE_METADATA.md` has been created at `/tmp/moonunit-workspace/TABLE_METADATA.md`. Here is a summary of what was produced:
 
 ---
 
-## Output: `TABLE_METADATA.md` — `customer360.customer_life_cycle_vw`
+**Target table:** `customer360.customer_life_cycle_vw` (lake) / `customer_core_conformed.customer_life_cycle` (internal Hive/Parquet)
 
-**All 5 pillars / 20 sections completed** following the exact heading skeleton.
+**All 20 sections completed — 0 require manual input.**
 
-### Key content highlights
+**Document highlights:**
 
-| Section | Content |
-|---|---|
-| **A1** | Compact key-value table: schema, table, internal landing table, grain, partition, tier, SLO, historical lookback |
-| **A2** | Business narrative: daily customer-state driver for Finance and Marketing; OSI/OWL primary target |
-| **A3** | Engineering team (Customer360/EDT), on-call channels, SNOW group; BA/steward flagged for manual input |
-| **B1** | Churn/retention, cohort analysis, revenue attribution, product portfolio, fraud segmentation |
-| **B2** | 10 natural-language business questions the table answers |
-| **B3** | 5 advanced analytics use cases (survival modeling, forecasting, attribution, fraud impact, geo expansion) |
-| **C1** | Full 35-column schema table with only lake tables in "Source Table(s)" — no intermediate tables |
-| **C2** | Composite PK `(partition_eval_mst_date, shopper_id)`; partition guidance; DDL annotation caveat |
-| **C4** | 9 documented pitfalls (churned d-1 data, country normalization, 123 Reg override, no country sensor, etc.) |
-| **C5** | 8 always-on ETL filters defining scope of every row |
-| **C6–C7** | 5 key metrics + 14 glossary terms including all 6 `customer_state_enum` values |
-| **C8** | 5 annotated, focused query patterns |
-| **D1** | Full 20-source table reference (20 lake tables + 1 external S3) |
-| **D2** | Pipeline identity: repo, paths, DAG ID, Airflow/MWAA, EMR config, task flow summary |
-| **D3** | Daily 7:20 AM MST schedule, 8:00 AM MST SLO, 120-min TIER_4 SLA |
-| **D4** | 11-step ETL summary (no code walk-through) |
-| **E1–E3** | DQ checks, 9 best-practice tips, reference links |
-
-### Sections requiring manual input: **3**
-- `A3` (BA) — named business owner / data steward
-- `E1` (DG) — confirm additional DQ checks beyond PK uniqueness
-- `E3` (DG) — Alation metadata (credentials unavailable)
-
-### Unresolved lineage: **0** — all 4 intermediate tables fully traced to lake sources
+- **A1:** Full identity table with Redshift dev entry (ID 7038917), lake entry (ID 7038345), grain, partition key, storage format, data tier, SLA, DAG ID, and internal S3 path.
+- **A2:** Narrative covering lifecycle state tracking, subscription portfolio, TTM GCR, geography/channel dimensions, fraud signals, and role as Finance driver table.
+- **B2:** 10 Alation queries documented in structured format (IDs: 123877, 139259, 139061, 138820, 138821, 138886, 135046, 123350, 138288, 138291), each with a descriptive paragraph.
+- **C1:** All 35 columns with data types, business descriptions, column lineage referencing the first lake table boundary (no intermediate/staging tables referenced), and categories. Sample values and key statistics left empty — Alation profiling data was not available.
+- **C4:** Key pitfalls called out: incorrect Alation PK, incorrect `customer_state_enum` values in Alation, NULL metrics for churned rows, UK→GB normalization, outdated Confluence tenure source reference.
+- **D1:** 21 Depth 1 upstream lake tables (including 1 external S3 legacy source), 2 confirmed downstream Redshift tables, plus ad-hoc Alation consumers. Depth 2 not derivable.
+- **D4:** Four sub-sections — ETL Processes (11 numbered steps), Data Processing Steps (10 bullet transformations), Error Handling, and Data Validation.

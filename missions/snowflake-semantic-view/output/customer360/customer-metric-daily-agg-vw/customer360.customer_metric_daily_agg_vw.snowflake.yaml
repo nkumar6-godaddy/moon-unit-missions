@@ -1,0 +1,684 @@
+name: customer360_customer_metric_daily_agg
+description: |
+  Daily aggregated customer life-cycle metrics segmented by 19 customer
+  dimensions. One row per unique combination of partition_eval_mst_date and
+  the 19-column dimension key. Tracks beginning and ending customer counts,
+  new acquisitions, churn, reactivations, merges, net movements, and trailing
+  twelve-month GCR for each customer segment combination. Sourced from
+  customer360.customer_life_cycle_vw (staging:
+  customer_core_conformed.customer_life_cycle). Refreshed daily at 7:30 AM MST
+  by DAG customer_metric_daily_agg_dag (schedule: 0 30 7 * * *).
+
+tables:
+  - name: customer_metric_daily_agg
+    description: |
+      Daily pre-aggregated customer metrics table. Each row is uniquely
+      identified by a 20-column composite key (partition_eval_mst_date plus
+      19 segment dimensions). Stores pre-aggregated customer movement counts
+      (new, churn, merge, reactivation, beginning, ending, net) and trailing
+      twelve-month GCR per dimension combination. Carry-forward logic ensures
+      all prior-day dimension combinations appear on subsequent dates with
+      zero metric values when no activity is observed.
+    base_table:
+      database: MARKETING_CORE_DEV
+      schema: CONFORMED
+      table: customer_metric_daily_agg_vw
+
+    dimensions:
+      - name: customer_type_reason_desc
+        description: |
+          Reason description for the customer type classification (e.g.,
+          'Registered', 'Transactional'). NULL is replaced with 'Not Classified'.
+          From customer_core_conformed.customer_life_cycle.customer_type_reason_desc
+          (published as customer360.customer_life_cycle_vw). Transformation:
+          COALESCE(customer_type_reason_desc, 'Not Classified'); cast to string
+          in conform_datatype(). Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via customer_core_conformed
+          .customer_life_cycle staging; not directly joinable.
+        expr: customer_type_reason_desc
+        data_type: VARCHAR
+        synonyms: ["customer type reason", "type reason", "type classification reason"]
+
+      - name: customer_acquisition_mst_month
+        description: |
+          Month when the customer was first acquired, formatted as yyyy-MM in
+          Mountain Standard Time. Used as acquisition cohort grouping key.
+          NULL is replaced with empty string ''. From
+          customer_core_conformed.customer_life_cycle.customer_acquisition_mst_month.
+          Transformation: COALESCE(customer_acquisition_mst_month, ''); cast to
+          string. Composite PK member. Derived from customer360
+          .customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_acquisition_mst_month
+        data_type: VARCHAR
+        synonyms: ["acquisition month", "cohort month", "customer acquisition month"]
+
+      - name: customer_domestic_international_name
+        description: |
+          Classification of whether the customer is Domestic (US) or
+          International. Low cardinality. NULL is replaced with 'International'.
+          From customer_core_conformed.customer_life_cycle
+          .customer_domestic_international_name. Transformation:
+          COALESCE(customer_domestic_international_name, 'International'); cast
+          to string. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_domestic_international_name
+        data_type: VARCHAR
+        synonyms: ["domestic international", "dom intl", "geography type", "domestic vs international"]
+
+      - name: customer_region_1_name
+        description: |
+          Primary (macro-level) geographic region of the customer, typically
+          continent-level grouping (e.g., 'North America', 'EMEA'). NULL is
+          replaced with 'International - RoW'. From
+          customer_core_conformed.customer_life_cycle.customer_region_1_name.
+          Transformation: COALESCE(customer_region_1_name, 'International - RoW');
+          cast to string. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_region_1_name
+        data_type: VARCHAR
+        synonyms: ["region 1", "macro region", "region level 1", "primary region"]
+
+      - name: customer_region_2_name
+        description: |
+          Secondary geographic region of the customer (sub-continent or country
+          group level). NULL is replaced with 'Rest of World (RoW)'. From
+          customer_core_conformed.customer_life_cycle.customer_region_2_name.
+          Transformation: COALESCE(customer_region_2_name, 'Rest of World (RoW)');
+          cast to string. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_region_2_name
+        data_type: VARCHAR
+        synonyms: ["region 2", "sub region", "region level 2", "secondary region"]
+
+      - name: customer_region_3_name
+        description: |
+          Tertiary geographic region of the customer (state or province level).
+          NULL is replaced with 'NA'. From
+          customer_core_conformed.customer_life_cycle.customer_region_3_name.
+          Transformation: COALESCE(customer_region_3_name, 'NA'); cast to string.
+          Note: source comment indicates 'NA' may be aligned to 'RoW Other' in
+          dim_country_vw in a future update. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_region_3_name
+        data_type: VARCHAR
+        synonyms: ["region 3", "tertiary region", "region level 3", "state province region"]
+
+      - name: customer_country_name
+        description: |
+          Country name at the customer's evaluation date. NULL is replaced with
+          'Unknown'. Sourced from
+          customer_core_conformed.customer_life_cycle.customer_acquisition_country_name,
+          aliased as customer_country_name in PySpark SELECT. Transformation:
+          COALESCE(customer_acquisition_country_name, 'Unknown') AS
+          customer_country_name; cast to string. Composite PK member. Derived
+          from customer360.customer_life_cycle_vw via staging; not directly
+          joinable.
+        expr: customer_country_name
+        data_type: VARCHAR
+        synonyms: ["country", "country name", "acquisition country", "customer country"]
+
+      - name: customer_country_code
+        description: |
+          ISO 3166-1 alpha-2 country code at the customer's evaluation date,
+          uppercased. NULL is replaced with '--'. UK is normalized to GB per ISO
+          standard. Sourced from
+          customer_core_conformed.customer_life_cycle.customer_acquisition_country_code,
+          aliased as customer_country_code. Transformation:
+          COALESCE(customer_acquisition_country_code, '--') then
+          UPPER() with F.when(UPPER(col) == 'UK', 'GB').otherwise(UPPER(col))
+          applied in PySpark withColumn() post-aggregation; cast to string.
+          Composite PK member. Derived from customer360.customer_life_cycle_vw
+          via staging; not directly joinable.
+        expr: customer_country_code
+        data_type: VARCHAR
+        synonyms: ["country code", "ISO country code", "acquisition country code"]
+
+      - name: customer_type_name
+        description: |
+          Customer type classification at evaluation date (e.g., 'Retail',
+          'Wholesale', 'Reseller'). NULL is replaced with 'Not Classified'. From
+          customer_core_conformed.customer_life_cycle.customer_type_name.
+          Transformation: COALESCE(customer_type_name, 'Not Classified'); cast
+          to string. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_type_name
+        data_type: VARCHAR
+        synonyms: ["customer type", "type name", "customer classification"]
+
+      - name: acquisition_channel_name
+        description: |
+          Marketing or sales channel through which the customer was acquired
+          (e.g., 'Direct', 'Partner', 'Web'). NULL is replaced with
+          'Not GA Attributed'. Sourced from
+          customer_core_conformed.customer_life_cycle.customer_acquisition_channel_name,
+          aliased as acquisition_channel_name. Transformation:
+          COALESCE(customer_acquisition_channel_name, 'Not GA Attributed') AS
+          acquisition_channel_name; cast to string. Composite PK member.
+          Derived from customer360.customer_life_cycle_vw via staging; not
+          directly joinable.
+        expr: acquisition_channel_name
+        data_type: VARCHAR
+        synonyms: ["channel", "acquisition channel", "marketing channel", "channel name"]
+
+      - name: customer_tenure_year_count
+        description: |
+          Integer representation of customer tenure in whole years at evaluation
+          date. Used as a dimension grouping key for tenure-based cohort analysis.
+          NULL is replaced with 0. From
+          customer_core_conformed.customer_life_cycle.customer_tenure_year_count.
+          Transformation: COALESCE(customer_tenure_year_count, 0); cast to int.
+          Composite PK member. Derived from customer360.customer_life_cycle_vw
+          via staging; not directly joinable.
+        expr: customer_tenure_year_count
+        data_type: NUMBER
+        synonyms: ["tenure", "years as customer", "customer age years", "tenure years"]
+
+      - name: product_ownership_category_list
+        description: |
+          String-encoded list of product P&L categories currently owned by the
+          customer at evaluation date. Originally array<string> in source;
+          stored as string representation of a sorted array (e.g., '[Domain,
+          Hosting, Email]'). Sourced from
+          customer_core_conformed.customer_life_cycle.product_pnl_category_list,
+          aliased as product_ownership_category_list. Transformation:
+          product_pnl_category_list AS product_ownership_category_list; cast
+          from array<string> to string via conform_datatype(). sort_array()
+          comparison is used in the carry-forward LEFT ANTI JOIN. WARNING: Do
+          not use = equality for value matching; use LIKE '%Domain%' for
+          substring matching. Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: product_ownership_category_list
+        data_type: VARCHAR
+        synonyms: ["product categories", "category list", "owned categories", "pnl category list", "product pnl categories"]
+
+      - name: product_ownership_line_list
+        description: |
+          String-encoded list of product P&L lines currently owned by the
+          customer at evaluation date. Originally array<string> in source;
+          stored as string representation of a sorted array. Sourced from
+          customer_core_conformed.customer_life_cycle.product_pnl_line_list,
+          aliased as product_ownership_line_list. Transformation:
+          product_pnl_line_list AS product_ownership_line_list; cast from
+          array<string> to string via conform_datatype(). sort_array()
+          comparison used in carry-forward anti-join. WARNING: Do not use =
+          equality for value matching; use LIKE for substring matching.
+          Composite PK member. Derived from customer360.customer_life_cycle_vw
+          via staging; not directly joinable.
+        expr: product_ownership_line_list
+        data_type: VARCHAR
+        synonyms: ["product lines", "line list", "owned product lines", "pnl line list", "product pnl lines"]
+
+      - name: reseller_type_name
+        description: |
+          Type of reseller associated with the customer (e.g., 'Partner
+          Reseller', 'API Reseller'). NULL indicates a direct non-reseller
+          customer; NULL is NOT replaced in the SELECT — the field can be NULL
+          in the output. From
+          customer_core_conformed.customer_life_cycle.reseller_type_name.
+          Transformation: passed as-is without COALESCE in GROUP BY SELECT
+          (NULL preserved); COALESCE used only in anti-join comparison; cast to
+          string in conform_datatype(). Composite PK member. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: reseller_type_name
+        data_type: VARCHAR
+        synonyms: ["reseller type", "reseller", "partner type", "reseller classification"]
+
+      - name: fraud_flag
+        description: |
+          Boolean indicator: true if the customer account is flagged as
+          fraudulent at evaluation date. NULL is replaced with false. Sourced
+          from customer_core_conformed.customer_life_cycle.customer_fraud_flag,
+          renamed to fraud_flag in conform_datatype(). Transformation:
+          COALESCE(customer_fraud_flag, false) AS customer_fraud_flag in GROUP
+          BY SELECT; cast to boolean AS fraud_flag in conform_datatype().
+          Composite PK member. Derived from customer360.customer_life_cycle_vw
+          via staging; not directly joinable.
+        expr: fraud_flag
+        data_type: BOOLEAN
+        synonyms: ["is fraud", "customer fraud flag", "fraud indicator", "fraudulent customer"]
+        labels: [filter]
+
+      - name: brand_name_list
+        description: |
+          String-encoded list of GoDaddy brands associated with the customer's
+          purchases at evaluation date. Originally array<string> in source;
+          stored as string representation of a sorted array. From
+          customer_core_conformed.customer_life_cycle.brand_name_list.
+          Transformation: brand_name_list passed as-is from GROUP BY SELECT
+          (no COALESCE applied); cast from array<string> to string in
+          conform_datatype(). sort_array() comparison used in carry-forward
+          anti-join. WARNING: Do not use = equality for value matching; use
+          LIKE '%GoDaddy%' for substring matching. Composite PK member. Derived
+          from customer360.customer_life_cycle_vw via staging; not directly
+          joinable.
+        expr: brand_name_list
+        data_type: VARCHAR
+        synonyms: ["brands", "brand list", "customer brands", "associated brands"]
+
+      - name: ttm_gcr_segment_enum
+        description: |
+          Trailing twelve-month Gross Cash Received (GCR) segment bucket.
+          Enumerated values: '0' (GCR is NULL or <= $0), '<=500' ($0 < GCR <=
+          $500), '>500' (GCR > $500). Derived from
+          customer_core_conformed.customer_life_cycle.ttm_gcr_usd_amt.
+          Transformation: CASE WHEN ttm_gcr_usd_amt IS NULL OR ttm_gcr_usd_amt
+          <= 0 THEN '0' WHEN ttm_gcr_usd_amt > 0 AND ttm_gcr_usd_amt <= 500
+          THEN '<=500' WHEN ttm_gcr_usd_amt > 500 THEN '>500' END AS
+          ttm_gcr_segment_enum; cast to string. Composite PK member. Note:
+          ttm_gcr_usd_amt (fact) and ttm_gcr_segment_enum represent the same
+          underlying metric at different granularities — do not double-count.
+          Derived from customer360.customer_life_cycle_vw via staging; not
+          directly joinable.
+        expr: ttm_gcr_segment_enum
+        data_type: VARCHAR
+        synonyms: ["GCR segment", "revenue segment", "TTM segment", "ttm gcr bucket", "revenue bucket"]
+        is_enum: true
+        sample_values: ["0", "<=500", ">500"]
+
+      - name: point_of_purchase_name
+        description: |
+          The channel or method through which the customer's acquisition purchase
+          was made (e.g., 'eCommerce', 'Phone', 'Store'). NULL is replaced with
+          'Unknown'. From
+          customer_core_conformed.customer_life_cycle.point_of_purchase_name.
+          Transformation: COALESCE(point_of_purchase_name, 'Unknown'); cast to
+          string. Composite PK member per DQ constraint (isPrimaryKey() in
+          data_quality/constraints/customer_metric_daily_agg.json). NOTE: lake
+          DDL does NOT annotate this column as @PrimaryKey — discrepancy; DQ
+          constraint is authoritative. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: point_of_purchase_name
+        data_type: VARCHAR
+        synonyms: ["purchase channel", "point of purchase", "purchase method", "acquisition purchase channel"]
+
+      - name: customer_acquisition_bill_fraud_flag
+        description: |
+          Boolean indicator: true if the customer's acquisition billing
+          transaction was flagged as fraudulent. NULL is replaced with false.
+          From
+          customer_core_conformed.customer_life_cycle.customer_acquisition_bill_fraud_flag.
+          Transformation: COALESCE(customer_acquisition_bill_fraud_flag, false);
+          cast to boolean. Composite PK member per DQ constraint (isPrimaryKey()
+          in data_quality/constraints/customer_metric_daily_agg.json). NOTE:
+          lake DDL does NOT annotate this column as @PrimaryKey — discrepancy;
+          DQ constraint is authoritative. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: customer_acquisition_bill_fraud_flag
+        data_type: BOOLEAN
+        synonyms: ["acquisition bill fraud", "billing fraud flag", "acquisition fraud flag"]
+        labels: [filter]
+
+      - name: data_source_enum
+        description: |
+          Identifies the source pipeline that populated the row. Enumerated:
+          'customer360' (primary daily pipeline, hardcoded literal constant) or
+          'legacy_dac' (legacy daily active customers backfill via separate DAG
+          customer_metric_daily_agg_backfill.py for pre-cutover historical
+          dates). Primary pipeline always emits 'customer360'. Transformation:
+          Literal 'customer360' AS data_source_enum in final_metrics SQL; cast
+          to string. Derived from customer360.customer_life_cycle_vw via
+          staging; not directly joinable.
+        expr: data_source_enum
+        data_type: VARCHAR
+        synonyms: ["data source", "source system", "pipeline source", "source pipeline"]
+        is_enum: true
+        sample_values: ["customer360", "legacy_dac"]
+
+    time_dimensions:
+      - name: partition_eval_mst_date
+        description: |
+          Evaluation date in Mountain Standard Time (MST) for which customer
+          metrics are computed. Primary partition column of the lake table —
+          REQUIRED in all queries to avoid full-table scans. Stored as string
+          (yyyy-MM-dd format) in the lake; expr applies TRY_TO_DATE() for date
+          semantics in Snowflake. Composite PK member. From
+          customer_core_conformed.customer_life_cycle.partition_eval_mst_date.
+          Transformation: passed through GROUP BY as position 1; cast to string
+          in conform_datatype(). Derived from customer360.customer_life_cycle_vw
+          via staging; not directly joinable.
+        expr: TRY_TO_DATE(partition_eval_mst_date)
+        data_type: DATE
+        synonyms: ["eval date", "evaluation date", "partition date", "report date", "as of date", "snapshot date"]
+
+      - name: etl_build_mst_ts
+        description: |
+          Timestamp of when the ETL pipeline executed, in Mountain Standard Time.
+          Used for pipeline auditing and data freshness monitoring; not a
+          business analysis dimension. Generated in PySpark conform_datatype():
+          cast(from_utc_timestamp(current_timestamp(), 'MST') as timestamp) AS
+          etl_build_mst_ts. Derived from the pipeline execution timestamp of the
+          customer_metric_daily_agg DAG; not directly joinable to source tables.
+        expr: etl_build_mst_ts
+        data_type: TIMESTAMP
+        synonyms: ["etl timestamp", "build timestamp", "pipeline run time", "load timestamp"]
+
+    facts:
+      - name: product_category_qty
+        description: |
+          Count of distinct product P&L categories owned by the customer at
+          evaluation date. Computed from the array length of
+          product_ownership_category_list (before cast to string). Returns 0
+          when product_ownership_category_list is NULL. Derived from
+          customer_core_conformed.customer_life_cycle.product_pnl_category_list.
+          Transformation: CASE WHEN product_ownership_category_list IS NULL THEN
+          0 ELSE size(product_ownership_category_list) END AS product_category_qty;
+          cast to int. Derived from customer360.customer_life_cycle_vw via
+          staging; not directly joinable.
+        expr: product_category_qty
+        data_type: NUMBER
+        synonyms: ["product category count", "number of product categories", "category count", "owned category count"]
+
+      - name: ttm_gcr_usd_amt
+        description: |
+          Total Gross Cash Received (GCR) in USD over the trailing twelve months
+          for this customer segment dimension combination. Pre-aggregated via
+          SUM(ttm_gcr_usd_amt) in the GROUP BY. From
+          customer_core_conformed.customer_life_cycle.ttm_gcr_usd_amt.
+          Transformation: SUM(ttm_gcr_usd_amt) in GROUP BY aggregation; zero-
+          filled (CAST(0 AS DECIMAL(18,2))) for carry-forward rows; cast to
+          decimal(18,2) in conform_datatype(). Note: ttm_gcr_segment_enum
+          (dimension) is derived from this same underlying value — do not
+          double-count. Derived from customer360.customer_life_cycle_vw via
+          staging; not directly joinable.
+        expr: ttm_gcr_usd_amt
+        data_type: NUMBER
+        synonyms: ["TTM GCR", "trailing twelve month GCR", "ttm revenue", "gcr amount", "gross cash received", "ttm gcr usd"]
+
+      - name: ending_customer_qty
+        description: |
+          Number of active customers at the end of the evaluation date for this
+          dimension combination. Pre-aggregated via COUNT_IF(active_status_flag =
+          true) in GROUP BY. Zero-filled for carry-forward rows. From
+          customer_core_conformed.customer_life_cycle.active_status_flag.
+          Transformation: COUNT_IF(active_status_flag = true) AS
+          ending_customer_qty; cast to bigint. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: ending_customer_qty
+        data_type: NUMBER
+        synonyms: ["ending customers", "active customers", "customer count", "end of period customers", "period end count"]
+
+      - name: churn_customer_qty
+        description: |
+          Number of customers who churned on the evaluation date for this
+          dimension combination. Pre-aggregated via
+          COUNT_IF(customer_churn_mst_date is not null) in GROUP BY. Zero-filled
+          for carry-forward rows. From
+          customer_core_conformed.customer_life_cycle.customer_churn_mst_date.
+          Transformation: COUNT_IF(customer_churn_mst_date is not null) AS
+          churn_customer_qty; cast to bigint. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: churn_customer_qty
+        data_type: NUMBER
+        synonyms: ["churned customers", "churn count", "customers churned", "churn quantity"]
+
+      - name: merge_customer_qty
+        description: |
+          Number of customers merged (deduplicated or consolidated into another
+          account) on the evaluation date for this dimension combination.
+          Pre-aggregated via COUNT_IF(customer_merge_mst_date is not null) in
+          GROUP BY. Zero-filled for carry-forward rows. From
+          customer_core_conformed.customer_life_cycle.customer_merge_mst_date.
+          Transformation: COUNT_IF(customer_merge_mst_date is not null) AS
+          merge_customer_qty; cast to bigint. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: merge_customer_qty
+        data_type: NUMBER
+        synonyms: ["merged customers", "merge count", "customers merged", "merge quantity"]
+
+      - name: new_customer_qty
+        description: |
+          Number of new customers acquired on the evaluation date for this
+          dimension combination. Pre-aggregated via
+          COUNT_IF(customer_acquisition_mst_date = partition_eval_mst_date) in
+          GROUP BY. Zero-filled for carry-forward rows. From
+          customer_core_conformed.customer_life_cycle.customer_acquisition_mst_date.
+          Transformation: COUNT_IF(customer_acquisition_mst_date =
+          partition_eval_mst_date) AS new_customer_qty; cast to bigint. Derived
+          from customer360.customer_life_cycle_vw via staging; not directly
+          joinable.
+        expr: new_customer_qty
+        data_type: NUMBER
+        synonyms: ["new customers", "new acquisitions", "acquired customers", "customer acquisitions", "first time customers"]
+
+      - name: reactivate_customer_qty
+        description: |
+          Number of previously churned customers who reactivated on the
+          evaluation date for this dimension combination. Pre-aggregated via
+          COUNT_IF(customer_reactivate_mst_date is not null) in GROUP BY.
+          Zero-filled for carry-forward rows. From
+          customer_core_conformed.customer_life_cycle.customer_reactivate_mst_date.
+          Transformation: COUNT_IF(customer_reactivate_mst_date is not null) AS
+          reactivate_customer_qty; cast to bigint. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: reactivate_customer_qty
+        data_type: NUMBER
+        synonyms: ["reactivated customers", "reactivations", "win-backs", "reactivation count", "returning customers"]
+
+      - name: beginning_customer_qty
+        description: |
+          Number of active customers at the start of the evaluation date for
+          this dimension combination (i.e., the ending count from the prior
+          day). Computed via LAG() window function partitioned by all 19
+          dimension columns and ordered by partition_eval_mst_date. Returns 0
+          if no prior-adjacent day row exists (gap in data). Transformation:
+          CASE WHEN LAG(partition_eval_mst_date) OVER (PARTITION BY {dim_cols}
+          ORDER BY partition_eval_mst_date) = DATE_SUB(partition_eval_mst_date,
+          1) THEN LAG(ending_customer_qty) OVER (...) ELSE 0 END AS
+          beginning_customer_qty; cast to bigint. Derived from
+          customer360.customer_life_cycle_vw via staging; not directly joinable.
+        expr: beginning_customer_qty
+        data_type: NUMBER
+        synonyms: ["beginning customers", "start of period customers", "prior day ending customers", "opening balance", "period start count"]
+
+      - name: net_move_qty
+        description: |
+          Reconciliation metric for customer count movement beyond simple
+          add/churn arithmetic: ending_customer_qty - beginning_customer_qty -
+          new_customer_qty + (churn_customer_qty - reactivate_customer_qty) +
+          merge_customer_qty. Non-zero values indicate segment transfers or data
+          reconciliation gaps. Derived from other pre-aggregated facts.
+          Transformation: (ending_customer_qty - beginning_customer_qty -
+          new_customer_qty + (churn_customer_qty - reactivate_customer_qty) +
+          merge_customer_qty) AS net_move_qty in final_metrics SQL; cast to
+          bigint. Derived from customer360.customer_life_cycle_vw via staging;
+          not directly joinable.
+        expr: net_move_qty
+        data_type: NUMBER
+        synonyms: ["net movement", "net move", "reconciliation quantity", "customer movement"]
+
+      - name: net_add_qty
+        description: |
+          Net customer additions for the evaluation date: ending minus beginning
+          customer count. Positive value indicates period-over-period growth;
+          negative indicates decline. Derived from ending_customer_qty and
+          beginning_customer_qty. Transformation: (ending_customer_qty -
+          beginning_customer_qty) AS net_add_qty in final_metrics SQL; cast to
+          bigint. Derived from customer360.customer_life_cycle_vw via staging;
+          not directly joinable.
+        expr: net_add_qty
+        data_type: NUMBER
+        synonyms: ["net additions", "net add", "customer net growth", "period growth", "net customer change"]
+
+      - name: net_churn_qty
+        description: |
+          Net churn for the evaluation date: customers churned minus customers
+          reactivated. Positive value indicates net customer loss; negative
+          indicates net reactivation. Derived from churn_customer_qty and
+          reactivate_customer_qty. Transformation: (churn_customer_qty -
+          reactivate_customer_qty) AS net_churn_qty in final_metrics SQL; cast
+          to bigint. Derived from customer360.customer_life_cycle_vw via
+          staging; not directly joinable.
+        expr: net_churn_qty
+        data_type: NUMBER
+        synonyms: ["net churn", "churn minus reactivations", "net customer loss", "net attrition"]
+
+    metrics:
+      - name: total_ending_customer_qty
+        description: >
+          Total number of active customers at end of period, summed across all
+          qualifying dimension combinations. Evidence: ending_customer_qty is
+          pre-aggregated COUNT_IF(active_status_flag = true) in PySpark GROUP BY.
+        expr: SUM(ending_customer_qty)
+        synonyms: ["total active customers", "total customers", "customer count total", "total ending customers"]
+
+      - name: total_new_customer_qty
+        description: >
+          Total number of new customers acquired in the period, summed across all
+          qualifying dimension combinations. Evidence: new_customer_qty is
+          pre-aggregated COUNT_IF(customer_acquisition_mst_date =
+          partition_eval_mst_date) in PySpark GROUP BY.
+        expr: SUM(new_customer_qty)
+        synonyms: ["total new customers", "total acquisitions", "new customer total", "total new"]
+
+      - name: total_churn_customer_qty
+        description: >
+          Total number of customers who churned in the period, summed across all
+          qualifying dimension combinations. Evidence: churn_customer_qty is
+          pre-aggregated COUNT_IF(customer_churn_mst_date is not null) in PySpark
+          GROUP BY.
+        expr: SUM(churn_customer_qty)
+        synonyms: ["total churned customers", "total churn", "churn total", "total churned"]
+
+      - name: total_reactivate_customer_qty
+        description: >
+          Total number of customers who reactivated in the period, summed across
+          all qualifying dimension combinations. Evidence: reactivate_customer_qty
+          is pre-aggregated COUNT_IF(customer_reactivate_mst_date is not null) in
+          PySpark GROUP BY.
+        expr: SUM(reactivate_customer_qty)
+        synonyms: ["total reactivated customers", "total reactivations", "reactivation total", "total win-backs"]
+
+      - name: total_merge_customer_qty
+        description: >
+          Total number of customers merged in the period, summed across all
+          qualifying dimension combinations. Evidence: merge_customer_qty is
+          pre-aggregated COUNT_IF(customer_merge_mst_date is not null) in PySpark
+          GROUP BY.
+        expr: SUM(merge_customer_qty)
+        synonyms: ["total merged customers", "total merges", "merge total"]
+
+      - name: total_beginning_customer_qty
+        description: >
+          Total number of customers at the start of the period, summed across all
+          qualifying dimension combinations. Evidence: beginning_customer_qty is
+          computed via LAG() window function in PySpark.
+        expr: SUM(beginning_customer_qty)
+        synonyms: ["total beginning customers", "total opening balance", "period opening customers", "total start customers"]
+
+      - name: total_net_move_qty
+        description: >
+          Total net movement quantity, summed across all qualifying dimension
+          combinations. Evidence: net_move_qty is derived in PySpark final_metrics
+          SQL as reconciliation arithmetic across the other five movement facts.
+        expr: SUM(net_move_qty)
+        synonyms: ["total net movement", "total net move", "total reconciliation quantity"]
+
+      - name: total_net_add_qty
+        description: >
+          Total net customer additions for the period (total ending minus total
+          beginning), summed across all qualifying dimension combinations.
+          Evidence: net_add_qty is derived in PySpark final_metrics SQL.
+        expr: SUM(net_add_qty)
+        synonyms: ["total net additions", "total net growth", "total period growth", "total net customer change"]
+
+      - name: total_net_churn_qty
+        description: >
+          Total net churn for the period (total churned minus total reactivated),
+          summed across all qualifying dimension combinations. Evidence:
+          net_churn_qty is derived in PySpark final_metrics SQL.
+        expr: SUM(net_churn_qty)
+        synonyms: ["total net churn", "total net customer loss", "total net attrition"]
+
+      - name: total_ttm_gcr_usd_amt
+        description: >
+          Total trailing twelve-month Gross Cash Received (GCR) in USD, summed
+          across all qualifying dimension combinations. Evidence: ttm_gcr_usd_amt
+          is pre-aggregated SUM(ttm_gcr_usd_amt) in PySpark GROUP BY.
+        expr: SUM(ttm_gcr_usd_amt)
+        synonyms: ["total TTM GCR", "total GCR", "total trailing twelve month revenue", "total gross cash received", "total ttm gcr usd"]
+
+      - name: total_product_category_qty
+        description: >
+          Total product category count across all qualifying dimension
+          combinations. Evidence: product_category_qty is derived in PySpark as
+          size(product_ownership_category_list) with NULL → 0 handling.
+        expr: SUM(product_category_qty)
+        synonyms: ["total product categories", "total category count", "sum of product category counts"]
+
+custom_instructions: |
+  GRAIN: One row per unique combination of (partition_eval_mst_date,
+  customer_type_reason_desc, customer_acquisition_mst_month,
+  customer_domestic_international_name, customer_region_1_name,
+  customer_region_2_name, customer_region_3_name, customer_country_name,
+  customer_country_code, customer_type_name, acquisition_channel_name,
+  customer_tenure_year_count, product_ownership_category_list,
+  product_ownership_line_list, reseller_type_name, fraud_flag,
+  point_of_purchase_name, customer_acquisition_bill_fraud_flag,
+  brand_name_list, ttm_gcr_segment_enum). No synthetic single-column
+  primary key exists.
+
+  REQUIRED PARTITION FILTER: Always filter on partition_eval_mst_date in
+  every query. The column is stored as VARCHAR (yyyy-MM-dd). To use date
+  arithmetic, wrap with TRY_TO_DATE(partition_eval_mst_date). Example:
+    WHERE partition_eval_mst_date = '2024-01-15'
+    WHERE TRY_TO_DATE(partition_eval_mst_date)
+          BETWEEN '2024-01-01' AND '2024-01-31'
+  Omitting this filter causes a full-table scan across all partitions.
+
+  PRIMARY KEY CAVEATS:
+  - Composite PK spans all 20 columns (partition_eval_mst_date + 19 dimension
+    columns), confirmed by DQ constraint isPrimaryKey() in
+    data_quality/constraints/customer_metric_daily_agg.json.
+  - Lake DDL does NOT annotate point_of_purchase_name and
+    customer_acquisition_bill_fraud_flag as @PrimaryKey. This is a known
+    discrepancy; the DQ constraint (data_quality/constraints/) is authoritative.
+  - There is no single-column surrogate primary key.
+
+  ARRAY FIELD WARNINGS — three fields are stored as string-encoded sorted arrays:
+  - product_ownership_category_list: Originally array<string> from
+    customer_life_cycle_vw; stored as string representation of a sorted array
+    (e.g., '[Domain, Hosting, Email]'). Do NOT use = equality. Use LIKE for
+    substring matching: WHERE product_ownership_category_list LIKE '%Domain%'
+  - product_ownership_line_list: Same treatment — string-encoded sorted array.
+    Use LIKE for substring matching.
+  - brand_name_list: Same treatment — string-encoded sorted array from
+    customer_life_cycle.brand_name_list. Use LIKE for substring matching.
+
+  CARRY-FORWARD LOGIC: The pipeline carries forward all prior-day dimension
+  combinations with zero metric values using a LEFT ANTI JOIN on the full
+  19-column dimension key. This ensures continuity of dimension combinations
+  across dates even when no customer activity occurs on a given day.
+  beginning_customer_qty is computed via LAG() window function and is 0 when
+  prior-day data is absent for a dimension combination.
+
+  TTM GCR NOTE: ttm_gcr_segment_enum (dimension) and ttm_gcr_usd_amt (fact)
+  both derive from the same source column
+  (customer_life_cycle.ttm_gcr_usd_amt). Do not use both in the same
+  aggregation for revenue totals — they represent the same metric at different
+  granularities (bucketed vs. continuous).
+
+  NO RELATIONSHIPS: This semantic view contains a single logical table. The
+  source pipeline performs no joins; all data derives from a single GROUP BY
+  aggregation over customer_core_conformed.customer_life_cycle. No join
+  relationships are defined.
+
+  DATA FRESHNESS: Refreshed daily at 7:30 AM MST by DAG
+  customer_metric_daily_agg_dag (Airflow schedule: '0 30 7 * * *'). Data
+  typically reflects the prior calendar day.
+
+  DO NOT CLAIM — the following are NOT tables or relationships in this view:
+  - daily_metrics: Spark session-scoped temp view; not a catalog table.
+  - candidates_next_day: Spark session-scoped temp view; not a catalog table.
+  - missing_next_day: Spark session-scoped temp view; not a catalog table.
+  - daily_metrics_union: Spark session-scoped temp view; not a catalog table.
+  - daily_metrics_last_day: Spark session-scoped temp view; not a catalog table.
+  - customer360.customer_metric_monthly_agg: DOWNSTREAM consumer of this table;
+    not an upstream source. Do not join to it.
+  - customer_metric_daily_agg_vw_stg (Redshift): Redshift intermediate staging
+    table; not a lake table and not accessible in Snowflake.
+  - customer_mart.daily_active_customers: Used only by the separate backfill
+    DAG (customer_metric_daily_agg_backfill.py) for pre-cutover historical
+    dates; NOT used by the primary pipeline. Not accessible via this view.
+  - customer_core_conformed.customer_life_cycle: Hive/Parquet staging table on
+    S3; not directly accessible in Snowflake. Lake representation is
+    customer360.customer_life_cycle_vw.

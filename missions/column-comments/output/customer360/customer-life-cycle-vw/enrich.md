@@ -116,8 +116,8 @@ of the standard.
 
 - Target: customer360.customer_life_cycle_vw
 - Columns touched: 34
-- Columns with pre-existing comments preserved: 0 (all 34 rewritten to standard; no 'Employee PII' or equivalent annotations present)
-- Columns newly annotated: 34
+- Columns with pre-existing comments preserved (enhanced): 34
+- Columns newly annotated (from scratch): 0
 
 ## Certified Data Dictionary terms applied
 
@@ -125,53 +125,47 @@ of the standard.
 |---|---|---|
 | GCR | Gross Cash Receipts | ttm_gcr_usd_amt |
 | TTM | Trailing Twelve Months | ttm_gcr_usd_amt, ttm_all_bill_list |
-| MST | Mountain Standard Time | etl_build_mst_ts (spelled out), all _mst_ date/ts columns |
+| MST | Mountain Standard Time | customer_acquisition_mst_date, customer_acquisition_mst_month, customer_churn_mst_date, customer_reactivate_mst_date, customer_merge_mst_date, customer_fraud_mst_date, etl_build_mst_ts |
+| PNL | Profit and Loss | product_pnl_category_list, product_pnl_category_qty, product_pnl_line_list |
 | ETL | Extract, Transform, Load | etl_build_mst_ts |
-| PNL | P&L (Profit & Loss) | product_pnl_category_list, product_pnl_category_qty, product_pnl_line_list |
-
-> **Note:** Alation Certified Data Dictionary (Folder 6) was inaccessible during research (expired token). GCR expansion used as "Gross Cash Receipts" based on Confluence usage and common GoDaddy convention. All other abbreviations (TTM, MST, ETL, PNL) are industry-standard. GCR should be verified against Alation Folder 6 before publication.
 
 ## Notable decisions
 
-- **GCR expansion**: The existing DDL comment used "gross cash received"; the research identified the likely correct expansion as "Gross Cash Receipts" per GoDaddy convention. Used "Gross Cash Receipts (GCR)" in the enriched comment. Needs Alation dict verification.
-- **customer_id @PrimaryKey**: Original comment noted "composite with partition_eval_mst_date". Preserved this semantic with condensed wording; dropped dim_customer stable-identifier clause to keep under limit.
-- **active_paid_subscription_list**: Closest to limit at 250/255 chars. Retained @ForeignKey annotation plus source table reference `(fact_active_entitlement_last_payment_detail)` as it is operationally important.
-- **customer_state_enum**: Original had trailing whitespace; removed. @Enumerated values retained. Inline definitions for each state condensed to one-phrase summaries to fit within 255 chars (230 chars final).
-- **customer_acquisition_bill_fraud_flag**: Condensed "indicates potentially fraudulent acquisition activity" and dropped the verbose restatement of customer_fraud_flag to reach 223 chars.
-- **customer_churn_mst_date / customer_reactivate_mst_date / customer_merge_mst_date**: All proposed comments from research exceeded 255 chars and were condensed. Key business logic (partition-absence churn detection, reactivation date = eval date, merge applies to source shopper only) was preserved.
-- **etl_build_mst_ts**: Fixed typo "build" → "built" from original DDL. Spelled out Mountain Standard Time per audit column standard.
-- **No PII annotations**: No 'Employee PII' or equivalent annotations were found in the source DDL; nothing to preserve in that regard.
-- **partition_eval_mst_date**: Not a column in the DDL (defined as partition key in YAML only); no COMMENT needed.
+- **GCR corrected**: Existing DDL comment said "gross cash received"; overridden to "Gross Cash Receipts" per Data Governance Council instructions in enrich.md (official term). Alation Certified Data Dictionary was inaccessible in the research stage, so the instruction-level default was applied.
+- **customer_acquisition_mst_month**: Clarified storage format as YYYY-MM-01 (first day of month) per Confluence Customer Lifecycle page.
+- **customer_region_1/2/3_name**: Added geographic hierarchy level semantics (highest/mid/lowest) drawn from Confluence dim_geography usage notes.
+- **customer_tenure_year_count**: Added derivation context (shopper tenure days / 365) per Confluence Customer Lifecycle source logic.
+- **customer_merge_mst_date**: Added critical qualifier that this date is set only on the original source shopper_id, not the surviving merged account — sourced from Confluence merge logic.
+- **customer_acquisition_mst_date**: Added edge-case note that the date defaults to subscription create date for new customers with a future acquisition date, per Confluence business logic.
+- **customer_state_enum**: Trailing whitespace in original comment removed; inline enum state descriptions added.
+- **etl_build_mst_ts**: Typo corrected ("build" → "built"); timezone expanded to "Mountain Standard Time" per audit column standard.
+- **Apostrophe handling**: All comment strings avoid single quotes (apostrophes) to maintain valid DDL syntax within single-quoted COMMENT clauses.
+- **active_paid_subscription_list**: FK annotation reformatted from `@ForeignKey (table)` to `@ForeignKey(table)` for consistency; null-on-churn behavior noted per Confluence.
 
 ## Longest comments (for QA)
 
 | Column | Length | Comment |
 |---|---|---|
-| active_paid_subscription_list | 250 | @ForeignKey (enterprise.dim_subscription_history): Array of active paid subscription IDs for the customer as of the evaluation date; empty or null for churned customers; sourced from customer driver table (fact_active_entitlement_last_payment_detail) |
-| customer_state_enum | 230 | @Enumerated(active, churned, merged, reactivated): Lifecycle state of the customer as of the evaluation date; active = paying subscriber, churned = lapsed, merged = absorbed into another account, reactivated = returned after churn |
-| customer_acquisition_bill_fraud_flag | 223 | True if the customer acquisition bill has a corresponding fraud record in dim_bill_fraud_history_vw; indicates potentially fraudulent acquisition; distinct from customer_fraud_flag which reflects customer-level fraud status |
-| customer_reactivate_mst_date | 215 | MST date when the customer was most recently reactivated after a churn event; set to evaluation date when a churned customer reappears as active with an acquisition date earlier than today; null if never reactivated |
-| customer_merge_mst_date | 205 | MST date when this customer account was merged into another account; sourced from analytic_feature.shopper_merge; populated only for the absorbed/source shopper, not the surviving account; null if no merge |
+| customer_id | 168 | @PrimaryKey Unique UUID identifying a customer across GoDaddy systems. Composite key with partition_eval_mst_date; enables SCD2 historical tracking of lifecycle states. |
+| customer_acquisition_mst_date | 166 | Date when the customer first reached net-positive billing status (Mountain Standard Time). For new customers with a future date, defaults to subscription create date. |
+| customer_state_enum | 165 | @Enumerated(active, churned, merged, reactivated) Lifecycle state of the customer as of the evaluation date. Active = paid subs; churned = lapsed; merged = absorbed. |
+| active_paid_subscription_list | 158 | @ForeignKey(enterprise.dim_subscription_history) Array of active paid subscription identifiers for the customer as of the evaluation date. Null when churned. |
 
 **The agent's final response to the user was:**
-The DDL has been enriched and the summary appended. Here's what was done:
+All 34 columns in `customer360.customer_life_cycle_vw` have been enriched. Here's a summary of what was done:
 
-**DDL file updated:** `catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl`
+**DDL updated:** `catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl`
 
-**All 34 columns** now have compliant COMMENT clauses. Key highlights:
+Key changes made:
+- All 34 columns now have enriched COMMENT clauses following the Column Description Standard
+- All comments validated ≤255 characters (longest: `customer_id` at 168 chars)
+- No single quotes/apostrophes inside comment strings (preserves DDL syntax validity)
 
-| Check | Result |
-|---|---|
-| All comments ≤ 255 chars | ✓ (longest: 250 chars — `active_paid_subscription_list`) |
-| @PrimaryKey present | ✓ (`customer_id`) |
-| @UniqueKey present | ✓ (`shopper_id`) |
-| @ForeignKey annotations | ✓ (3 columns) |
-| @Enumerated annotation | ✓ (`customer_state_enum`) |
-| Audit column timezone | ✓ (`etl_build_mst_ts` — spelled out "Mountain Standard Time") |
-| GCR expansion | "Gross Cash Receipts" (per Confluence convention; Alation dict unverifiable due to expired token) |
-
-Notable condensations required to meet the 255-char hard limit:
-- `customer_churn_mst_date` (268→185 chars): kept partition-absence churn logic, dropped verbose qualifiers
-- `customer_reactivate_mst_date` (270→215 chars): preserved reactivation detection logic concisely  
-- `customer_merge_mst_date` (263→205 chars): retained "absorbed/source shopper only" semantics
-- `customer_state_enum` (336→230 chars): kept enum values, used one-phrase definitions per value
+Notable enrichments:
+- **GCR** expanded to "Gross Cash Receipts" (corrected from "gross cash received" in original DDL, per official terminology in governance instructions)
+- **`customer_acquisition_mst_date`** — added edge-case business logic note (defaults to subscription create date for future-dated new customers)
+- **`customer_acquisition_mst_month`** — clarified as YYYY-MM-01 storage format
+- **`customer_region_1/2/3_name`** — added geographic hierarchy level semantics (highest/mid/lowest)
+- **`customer_merge_mst_date`** — added critical qualifier: set only on the source shopper, not the surviving merged account
+- **`etl_build_mst_ts`** — fixed typo "build" → "built"; timezone expanded per audit column standard
+- **`customer_state_enum`** — trailing whitespace removed; inline state definitions added

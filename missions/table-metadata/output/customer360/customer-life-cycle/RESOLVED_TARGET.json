@@ -5,12 +5,12 @@
   "lake_table_path": "customer360/customer-life-cycle-vw",
   "confidence": "high",
   "evidence": [
-    "customer_life_cycle.py L29-31: DATABASE_NAME='customer_core_conformed', TABLE_NAME='customer_life_cycle' (internal landing table)",
-    "customer_life_cycle.py L1083: combined_customer_life_cycle_df.repartition(30).write.insertInto(QUALIFIED_TABLE_NAME, overwrite=True)",
-    "customer_life_cycle_dag.py: SuccessNotificationOperator -> call_lake_api -> target=customer360.customer_life_cycle_vw (prod path)",
-    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml: description='Analytic Dataset for Customer Life Cycle', data_tier=4",
-    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl: CREATE TABLE customer_life_cycle_vw(35 columns)",
-    "src/data_quality/constraints/customer_life_cycle_vw.json: PK check on (partition_eval_mst_date, shopper_id) for customer360.customer_life_cycle_vw",
+    "PySpark write: combined_customer_life_cycle_df.write.insertInto('customer_core_conformed.customer_life_cycle', overwrite=True) — customer_life_cycle.py:1083-1084",
+    "DAG SuccessNotificationOperator: db_name='customer360', table_name='customer_life_cycle_vw' — customer_life_cycle_dag.py",
+    "Lake registry confirmed: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml",
+    "Lake registry DDL confirmed: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl",
+    "Alation lake entry confirmed: 81.AwsDataCatalog.customer360.customer_life_cycle_vw (ID: 7038345)",
+    "Internal staging table: customer_core_conformed.customer_life_cycle (S3: s3://gd-ckpetlbatch-{AWS_ENV}-customer-core-conformed/customer_core_conformed/customer_life_cycle/)",
     "No lake_table_override provided in INPUT.md; code evidence is unambiguous"
   ]
 }

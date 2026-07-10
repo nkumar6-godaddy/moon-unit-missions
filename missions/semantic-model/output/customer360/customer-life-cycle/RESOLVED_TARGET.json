@@ -6,13 +6,11 @@
   "semantic_model_name": "customer360_customer_life_cycle_analytics",
   "confidence": "high",
   "evidence": [
-    "DAG customer360/customer-metrics/src/dag/customer_life_cycle_dag.py: SuccessNotificationOperator target = customer360.customer_life_cycle_vw",
-    "DAG: DataQualityOperator on customer360.customer_life_cycle_vw partitioned by partition_eval_mst_date",
-    "DAG: S3ToRedshiftOperator + insert_customer_life_cycle.sql → customer360.customer_life_cycle_vw",
-    "Lake catalog: repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml confirmed",
-    "Lake table.yaml: description='Analytic Dataset for Customer Life Cycle', data_tier=4, storage_format=Parquet, table_type=PARTITIONED",
-    "DQ constraint src/data_quality/constraints/customer_life_cycle_vw.json: isPrimaryKey(partition_eval_mst_date, shopper_id) on customer360.customer_life_cycle_vw",
-    "Alation ID 7038345: table customer360.customer_life_cycle_vw, connector=Athena, HIGH_CONFIDENCE auto-title",
-    "Confluence 4387965088: customer_life_cycle_vw Type=PARTITIONED, Tier=4, Grain='One row per customer per eval date'"
+    "gather.md §1: FEED_NAME=customer_life_cycle, DATABASE_NAME=customer_core_conformed, TABLE_NAME=customer_life_cycle — primary Hive write target via insertInto overwrite",
+    "gather.md §1: SuccessNotificationOperator targets customer360.customer_life_cycle_vw (lake notification target = OSI source)",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.yaml — lake catalog entry confirmed",
+    "repos/lake/catalog/config/prod/dlms-api/us-west-2/customer360/customer-life-cycle-vw/table.ddl — lake DDL schema confirmed",
+    "INPUT.md: no lake_table_override provided; code evidence used",
+    "INPUT.md: no semantic_model_name provided; derived from schema+table per instructions"
   ]
 }

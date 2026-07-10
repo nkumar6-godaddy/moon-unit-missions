@@ -18,6 +18,12 @@ Currently:
  from PySpark + DAG code.
 - `missions/semantic-model/` — generates OSI-compliant semantic model YAML
  from PySpark + DAG code.
+- `missions/snowflake-semantic-view/` — generates Snowflake Semantic View
+ YAML from PySpark + DAG code, with lineage-enriched field descriptions
+ and deterministic (script-based) validation.
+- `missions/repo-semantic-view/` — generates a single repo-level Snowflake
+ Semantic View YAML from a git repo URL + Confluence pages, auto-discovering
+ all PySpark jobs and lake tables with upstream lineage resolution.
 
 ## Conventions across missions
 
