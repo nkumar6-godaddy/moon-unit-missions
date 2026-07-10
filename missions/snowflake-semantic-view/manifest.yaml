@@ -365,6 +365,20 @@ plan:
         14. Every item in `PROVENANCE.json` → `do_not_claim` must NOT appear as a
             table, relationship, or metric — preserve info in `custom_instructions`
         15. `data_type` values must be valid Snowflake types (VARCHAR, NUMBER, DATE, etc.)
+        16. **ASCII only**: All text (names, descriptions, synonyms, custom_instructions)
+            must contain only ASCII characters (code points 0-127). Use '--' instead of
+            em dashes, '->' instead of arrows, and straight quotes only. Never use smart
+            quotes, typographic dashes, or Unicode symbols.
+        17. **Spaces only**: Use 2-space indentation throughout. Never use tab characters.
+        18. **Line length**: Keep `expr` values under 500 characters. For `verified_queries`
+            SQL, keep each individual line under 500 characters (use YAML block scalars
+            `|` or `>` and wrap long SQL).
+        19. **No duplicate YAML keys**: Ensure no top-level key appears more than once
+            in the output file. YAML silently discards earlier duplicates.
+        20. **Relationship integrity**: Every `left_table` and `right_table` in
+            `relationships` must match a `name` under `tables`. Relationships must not
+            form cycles (A->B->C->A).
+        21. **No BOM**: Output the file as plain UTF-8 without a byte-order mark.
 
         ## Step 3: Append summary to generate.md
         Append:

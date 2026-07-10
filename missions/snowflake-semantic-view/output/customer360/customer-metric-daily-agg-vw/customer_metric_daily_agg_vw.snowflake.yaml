@@ -212,7 +212,7 @@ tables:
         description: |
           Type of reseller associated with the customer (e.g., 'Partner
           Reseller', 'API Reseller'). NULL indicates a direct non-reseller
-          customer; NULL is NOT replaced in the SELECT — the field can be NULL
+          customer; NULL is NOT replaced in the SELECT - the field can be NULL
           in the output. From
           customer_core_conformed.customer_life_cycle.reseller_type_name.
           Transformation: passed as-is without COALESCE in GROUP BY SELECT
@@ -247,7 +247,7 @@ tables:
           Transformation: COALESCE(customer_acquisition_bill_fraud_flag, false);
           cast to boolean. Composite PK member per DQ constraint (isPrimaryKey()
           in data_quality/constraints/customer_metric_daily_agg.json). NOTE:
-          lake DDL does NOT annotate this column as @PrimaryKey — discrepancy;
+          lake DDL does NOT annotate this column as @PrimaryKey - discrepancy;
           DQ constraint is authoritative. Derived from
           customer360.customer_life_cycle_vw via staging; not directly joinable.
         expr: customer_acquisition_bill_fraud_flag
@@ -260,7 +260,7 @@ tables:
       - name: partition_eval_mst_date
         description: |
           Evaluation date in Mountain Standard Time (MST) for which customer
-          metrics are computed. Primary partition column of the lake table —
+          metrics are computed. Primary partition column of the lake table -
           REQUIRED in all queries to avoid full-table scans. Stored as string
           (yyyy-MM-dd format) in the lake; expr applies TRY_TO_DATE() for date
           semantics in Snowflake. Composite PK member. From
@@ -530,21 +530,11 @@ tables:
         description: >
           Total product category count across all qualifying dimension
           combinations. Evidence: product_category_qty is derived in PySpark as
-          size(product_ownership_category_list) with NULL → 0 handling.
+          size(product_ownership_category_list) with NULL -> 0 handling.
         expr: SUM(product_category_qty)
         synonyms: ["total product categories", "total category count", "sum of product category counts"]
 
 custom_instructions: |
-  GRAIN: One row per unique combination of (partition_eval_mst_date,
-  customer_type_reason_desc, customer_acquisition_mst_month,
-  customer_domestic_international_name, customer_region_1_name,
-  customer_region_2_name, customer_region_3_name, customer_country_name,
-  customer_country_code, customer_type_name, acquisition_channel_name,
-  customer_tenure_year_count, product_ownership_category_list,
-  product_ownership_line_list, reseller_type_name, fraud_flag,
-  customer_acquisition_bill_fraud_flag).
-  No synthetic single-column
-  primary key exists.
 
   REQUIRED PARTITION FILTER: Always filter on partition_eval_mst_date in
   every query. The column is stored as VARCHAR (yyyy-MM-dd). To use date
@@ -560,43 +550,4 @@ custom_instructions: |
     data_quality/constraints/customer_metric_daily_agg.json.
   - There is no single-column surrogate primary key.
 
-  ARRAY FIELD WARNINGS — three fields are stored as string-encoded sorted arrays:
-  - product_ownership_category_list: Originally array<string> from
-    customer_life_cycle_vw; stored as string representation of a sorted array
-    (e.g., '[Domain, Hosting, Email]'). Do NOT use = equality. Use LIKE for
-    substring matching: WHERE product_ownership_category_list LIKE '%Domain%'
-  - product_ownership_line_list: Same treatment — string-encoded sorted array.
-    Use LIKE for substring matching.
 
-  CARRY-FORWARD LOGIC: The pipeline carries forward all prior-day dimension
-  combinations with zero metric values using a LEFT ANTI JOIN on the full
-  19-column dimension key. This ensures continuity of dimension combinations
-  across dates even when no customer activity occurs on a given day.
-  beginning_customer_qty is computed via LAG() window function and is 0 when
-  prior-day data is absent for a dimension combination.
-
-  NO RELATIONSHIPS: This semantic view contains a single logical table. The
-  source pipeline performs no joins; all data derives from a single GROUP BY
-  aggregation over customer_core_conformed.customer_life_cycle. No join
-  relationships are defined.
-
-  DATA FRESHNESS: Refreshed daily at 7:30 AM MST by DAG
-  customer_metric_daily_agg_dag (Airflow schedule: '0 30 7 * * *'). Data
-  typically reflects the prior calendar day.
-
-  DO NOT CLAIM — the following are NOT tables or relationships in this view:
-  - daily_metrics: Spark session-scoped temp view; not a catalog table.
-  - candidates_next_day: Spark session-scoped temp view; not a catalog table.
-  - missing_next_day: Spark session-scoped temp view; not a catalog table.
-  - daily_metrics_union: Spark session-scoped temp view; not a catalog table.
-  - daily_metrics_last_day: Spark session-scoped temp view; not a catalog table.
-  - customer360.customer_metric_monthly_agg: DOWNSTREAM consumer of this table;
-    not an upstream source. Do not join to it.
-  - customer_metric_daily_agg_vw_stg (Redshift): Redshift intermediate staging
-    table; not a lake table and not accessible in Snowflake.
-  - customer_mart.daily_active_customers: Used only by the separate backfill
-    DAG (customer_metric_daily_agg_backfill.py) for pre-cutover historical
-    dates; NOT used by the primary pipeline. Not accessible via this view.
-  - customer_core_conformed.customer_life_cycle: Hive/Parquet staging table on
-    S3; not directly accessible in Snowflake. Lake representation is
-    customer360.customer_life_cycle_vw.

@@ -51,6 +51,21 @@ VALID_SNOWFLAKE_TYPES = {
 
 VALID_ACCESS_MODIFIERS = {"public_access", "private_access"}
 
+NON_ASCII_REPLACEMENTS = {
+    "\u2014": "--",   # em dash
+    "\u2013": "-",    # en dash
+    "\u2018": "'",    # left single quote
+    "\u2019": "'",    # right single quote
+    "\u201c": '"',    # left double quote
+    "\u201d": '"',    # right double quote
+    "\u2192": "->",   # rightwards arrow
+    "\u2190": "<-",   # leftwards arrow
+    "\u2026": "...",  # ellipsis
+}
+
+MAX_EXPR_LENGTH = 500
+MAX_SQL_LINE_LENGTH = 500
+
 
 class ValidationResult:
     def __init__(self, check_id, category, description):
@@ -83,6 +98,84 @@ def load_yaml(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
+
+# ── Raw-file checks (run before YAML parsing) ────────────────────────
+
+def check_bom(raw_bytes, results):
+    r = ValidationResult("E01", "encoding", "No byte-order mark (BOM) at file start")
+    if raw_bytes.startswith(b"\xef\xbb\xbf"):
+        r.fail("File starts with UTF-8 BOM (0xEFBBBF); remove it")
+    elif raw_bytes.startswith((b"\xff\xfe", b"\xfe\xff")):
+        r.fail("File starts with UTF-16 BOM; convert to UTF-8 without BOM")
+    results.append(r)
+
+
+def check_non_ascii(text, results):
+    r = ValidationResult("E02", "encoding", "All characters are ASCII (code points 0-127)")
+    hits = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        for col, ch in enumerate(line, 1):
+            if ord(ch) > 127:
+                suggestion = NON_ASCII_REPLACEMENTS.get(ch, "")
+                hint = f" (replace with {repr(suggestion)})" if suggestion else ""
+                hits.append(f"U+{ord(ch):04X} {repr(ch)} at line {line_no} col {col}{hint}")
+    if hits:
+        for h in hits[:20]:
+            r.fail(h)
+        if len(hits) > 20:
+            r.fail(f"... and {len(hits) - 20} more non-ASCII characters")
+    results.append(r)
+
+
+def check_tabs(text, results):
+    r = ValidationResult("E03", "encoding", "No tab characters (spaces only for indentation)")
+    tab_lines = [
+        i for i, line in enumerate(text.splitlines(), 1) if "\t" in line
+    ]
+    if tab_lines:
+        sample = tab_lines[:10]
+        r.fail(
+            f"Tab characters on {len(tab_lines)} line(s): {sample}"
+            + (" ..." if len(tab_lines) > 10 else "")
+        )
+    results.append(r)
+
+
+def check_raw_duplicate_top_level_keys(text, results):
+    r = ValidationResult("E04", "encoding", "No duplicate top-level YAML keys")
+    top_keys = []
+    for line in text.splitlines():
+        m = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*:", line)
+        if m:
+            top_keys.append(m.group(1))
+    counts = {}
+    for key in top_keys:
+        counts[key] = counts.get(key, 0) + 1
+    dups = {k: v for k, v in counts.items() if v > 1}
+    if dups:
+        for k, v in dups.items():
+            r.fail(f"Top-level key '{k}' appears {v} times (YAML silently uses last)")
+    results.append(r)
+
+
+def validate_raw_file(yaml_path):
+    results = []
+    raw = yaml_path.read_bytes()
+    check_bom(raw, results)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        r = ValidationResult("E00", "encoding", "File is valid UTF-8")
+        r.fail(f"File is not valid UTF-8: {e}")
+        results.append(r)
+        return results
+    check_non_ascii(text, results)
+    check_tabs(text, results)
+    check_raw_duplicate_top_level_keys(text, results)
+    return results
+
+
+# ── Parsed-YAML checks ───────────────────────────────────────────────
 
 def check_root_structure(data, results):
     r = ValidationResult("S01", "structural", "Root has 'name' (non-empty string)")
@@ -372,14 +465,100 @@ def check_custom_instructions(data, results):
         results.append(r)
 
 
+def check_long_values(data, results):
+    tables = data.get("tables", [])
+    if not isinstance(tables, list):
+        return
+
+    r = ValidationResult("E05", "encoding", f"All expr values under {MAX_EXPR_LENGTH} characters")
+    for i, tbl in enumerate(tables):
+        if not isinstance(tbl, dict):
+            continue
+        tname = tbl.get("name", f"tables[{i}]")
+        for section in ("dimensions", "time_dimensions", "facts", "metrics"):
+            for j, ent in enumerate(tbl.get(section, []) or []):
+                if not isinstance(ent, dict):
+                    continue
+                expr = ent.get("expr", "")
+                ename = ent.get("name", f"{section}[{j}]")
+                if isinstance(expr, str) and len(expr) > MAX_EXPR_LENGTH:
+                    r.fail(
+                        f"{tname}.{section}.{ename}.expr is {len(expr)} chars "
+                        f"(max {MAX_EXPR_LENGTH})"
+                    )
+    results.append(r)
+
+    r = ValidationResult(
+        "E06", "encoding",
+        f"Verified-query SQL lines under {MAX_SQL_LINE_LENGTH} characters",
+    )
+    vqs = data.get("verified_queries", [])
+    if isinstance(vqs, list):
+        for i, vq in enumerate(vqs):
+            if not isinstance(vq, dict):
+                continue
+            sql = vq.get("sql", "")
+            vname = vq.get("name", f"verified_queries[{i}]")
+            if isinstance(sql, str):
+                for ln, line in enumerate(sql.splitlines(), 1):
+                    if len(line) > MAX_SQL_LINE_LENGTH:
+                        r.fail(
+                            f"{vname}.sql line {ln} is {len(line)} chars "
+                            f"(max {MAX_SQL_LINE_LENGTH})"
+                        )
+    results.append(r)
+
+
+def check_relationship_cycles(data, results):
+    rels = data.get("relationships")
+    if not isinstance(rels, list) or len(rels) == 0:
+        return
+
+    r = ValidationResult("R04", "referential", "No cycles in relationship graph")
+    graph = {}
+    for rel in rels:
+        if not isinstance(rel, dict):
+            continue
+        lt = rel.get("left_table")
+        rt = rel.get("right_table")
+        if isinstance(lt, str) and isinstance(rt, str):
+            graph.setdefault(lt, []).append(rt)
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n: WHITE for n in graph}
+    for targets in list(graph.values()):
+        for t in targets:
+            if t not in color:
+                color[t] = WHITE
+
+    def dfs(node, path):
+        color[node] = GRAY
+        for neighbor in graph.get(node, []):
+            if color.get(neighbor) == GRAY:
+                cycle = path[path.index(neighbor) :] + [neighbor]
+                r.fail(f"Cycle detected: {' -> '.join(cycle)}")
+                return
+            if color.get(neighbor, WHITE) == WHITE:
+                dfs(neighbor, path + [neighbor])
+        color[node] = BLACK
+
+    for node in list(color.keys()):
+        if color[node] == WHITE:
+            dfs(node, [node])
+
+    results.append(r)
+
+
 def validate(data):
     results = []
     check_root_structure(data, results)
     check_tables(data, results)
     check_relationships(data, results)
+    check_relationship_cycles(data, results)
     check_verified_queries(data, results)
     check_view_level_metrics(data, results)
     check_custom_instructions(data, results)
+    check_long_values(data, results)
     return results
 
 
@@ -409,6 +588,8 @@ def main():
         print(f"ERROR: File not found: {yaml_path}", file=sys.stderr)
         sys.exit(2)
 
+    raw_results = validate_raw_file(yaml_path)
+
     try:
         data = load_yaml(yaml_path)
     except yaml.YAMLError as e:
@@ -419,7 +600,7 @@ def main():
         print("ERROR: YAML root is not a mapping", file=sys.stderr)
         sys.exit(2)
 
-    results = validate(data)
+    results = raw_results + validate(data)
     summary = summarize(results)
 
     report = {
